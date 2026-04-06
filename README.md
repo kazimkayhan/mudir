@@ -31,6 +31,12 @@ manager, and uses the [App Router](https://nextjs.org/docs/app) model for Next.j
 
 ## Getting Started
 
+### Prerequisites (desktop / Tauri)
+
+To run **`pnpm tauri dev`** or **`pnpm tauri build`**, install the [Tauri v2 prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS. On **Windows** you need **Rust (MSVC toolchain)**, **Visual Studio C++ build tools** (Desktop development with C++), and **WebView2**. Then restart your terminal so `cargo` is on your `PATH`.
+
+The Next.js UI alone (**`pnpm dev:next`**) only needs **Node.js** and **pnpm**.
+
 ### Running development server and use Tauri window
 
 After cloning for the first time, change your app identifier inside

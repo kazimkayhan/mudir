@@ -1,5 +1,6 @@
 "use client";
 import { Geist, Geist_Mono } from "next/font/google";
+import { AppShell } from "@/components/AppShell";
 import "@/styles/globals.css";
 
 const geistSans = Geist({
@@ -18,11 +19,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

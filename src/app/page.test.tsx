@@ -1,8 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import { expect, test } from "vitest";
-import Page from "../app/page";
+import DashboardPage from "./dashboard/page";
 
-test("Page", () => {
-  render(<Page />);
-  expect(screen.getByRole("main")).toBeDefined();
+test("Dashboard page", async () => {
+  render(<DashboardPage />);
+  expect(await screen.findByRole("main")).toBeTruthy();
+  expect(
+    screen.getByRole("heading", { level: 1, name: /dashboard/i }),
+  ).toBeTruthy();
 });

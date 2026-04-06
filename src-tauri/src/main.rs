@@ -2,5 +2,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-  tauri_nextjs_template_lib::run()
+  if let Err(err) = tauri_nextjs_template_lib::run() {
+    eprintln!("error while running tauri application: {err}");
+    std::process::exit(1);
+  }
 }
