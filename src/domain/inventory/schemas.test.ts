@@ -7,8 +7,8 @@ import {
 describe("formValuesToDelta", () => {
   test("purchase positive", () => {
     const v = inventoryFormSchema.parse({
-      productId: "p1",
       movementType: "purchase",
+      productId: "p1",
       qty: 5,
     });
     expect(formValuesToDelta(v)).toBe(5);
@@ -16,8 +16,8 @@ describe("formValuesToDelta", () => {
 
   test("sale negative", () => {
     const v = inventoryFormSchema.parse({
-      productId: "p1",
       movementType: "sale",
+      productId: "p1",
       qty: 3,
     });
     expect(formValuesToDelta(v)).toBe(-3);
@@ -25,9 +25,9 @@ describe("formValuesToDelta", () => {
 
   test("adjustment signed", () => {
     const v = inventoryFormSchema.parse({
-      productId: "p1",
-      movementType: "adjustment",
       adjustmentDelta: -2,
+      movementType: "adjustment",
+      productId: "p1",
     });
     expect(formValuesToDelta(v)).toBe(-2);
   });

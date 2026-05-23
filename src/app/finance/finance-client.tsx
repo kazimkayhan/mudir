@@ -1,55 +1,90 @@
 "use client";
 
-import { isTauri } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useId, useState } from "react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { Plus } from "lucide-react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import {
-  type CashSessionRow,
-  closeCashSession,
-  getOpenCashSession,
-  openCashSession,
-} from "@/bridge/cash-sessions";
-import {
+  deleteExpense,
   type ExpenseRow,
   insertExpense,
   listExpenses,
+  updateExpense,
 } from "@/bridge/expenses";
+import { PageTitle } from "@/components/app-icons";
+import { DataTable } from "@/components/data-table";
+import { PageHeader } from "@/components/page-header";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Field, FieldGroup } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { NumberInput } from "@/components/ui/number-input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { TranslationKey } from "@/i18n";
+import { useI18n } from "@/i18n/hooks";
+import { formatDate, formatMoney } from "@/lib/format";
+import { translateError } from "@/lib/translate-error";
+
+const PRESETS = ["rent", "utilities", "transport", "salary", "other"] as const;
+
+const CATEGORY_KEYS: Record<(typeof PRESETS)[number], TranslationKey> = {
+  other: "finance.category.other",
+  rent: "finance.category.rent",
+  salary: "finance.category.salary",
+  transport: "finance.category.transport",
+  utilities: "finance.category.utilities",
+};
+
+function categoryLabel(
+  t: (key: TranslationKey) => string,
+  category: string
+): string {
+  if (category in CATEGORY_KEYS) {
+    return t(CATEGORY_KEYS[category as (typeof PRESETS)[number]]);
+  }
+  return category;
+}
 
 export function FinanceClient() {
-  const uid = useId();
-  const catId = `${uid}-cat`;
-  const amtId = `${uid}-amt`;
-  const noteId = `${uid}-note`;
-  const openBalId = `${uid}-openbal`;
-  const openNoteId = `${uid}-opennote`;
-  const closeBalId = `${uid}-closebal`;
-
+  const { t, locale } = useI18n();
+  const catId = useId();
+  const amtId = useId();
+  const noteId = useId();
   const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
-  const [session, setSession] = useState<CashSessionRow | null>(null);
-  const [category, setCategory] = useState("general");
-  const [amount, setAmount] = useState(10);
+  const [category, setCategory] = useState("other");
+  const [amount, setAmount] = useState(0);
+  const [currency, setCurrency] = useState<"AFN" | "USD">("AFN");
   const [expNote, setExpNote] = useState("");
-  const [openingBalance, setOpeningBalance] = useState(0);
-  const [sessionNote, setSessionNote] = useState("");
-  const [closingBalance, setClosingBalance] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [editRow, setEditRow] = useState<ExpenseRow | null>(null);
 
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      const [e, s] = await Promise.all([
-        listExpenses(100),
-        getOpenCashSession(),
-      ]);
-      setExpenses(e);
-      setSession(s);
+      setExpenses(await listExpenses(100));
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      setError(translateError(t, message));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
-    void refresh();
+    refresh().catch(() => undefined);
   }, [refresh]);
 
   const addExpense = async () => {
@@ -57,262 +92,235 @@ export function FinanceClient() {
     setError(null);
     try {
       await insertExpense({
-        category: category.trim(),
         amount,
+        category: category.trim(),
+        currency_code: currency,
         note: expNote.trim() || undefined,
       });
       setExpNote("");
       await refresh();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      setError(translateError(t, message));
     } finally {
       setBusy(false);
     }
   };
 
-  const openSession = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await openCashSession({
-        openingBalance,
-        note: sessionNote.trim() || undefined,
-      });
-      setSessionNote("");
-      await refresh();
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const closeSession = async () => {
-    if (!session) {
+  const saveEdit = async () => {
+    if (!editRow) {
       return;
     }
-    setBusy(true);
     setError(null);
     try {
-      await closeCashSession({
-        sessionId: session.id,
-        closingBalance,
+      await updateExpense({
+        amount: editRow.amount,
+        category: editRow.category,
+        currency_code: editRow.currency_code as "AFN" | "USD",
+        id: editRow.id,
+        note: editRow.note ?? undefined,
       });
+      setEditRow(null);
       await refresh();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
+      const message = e instanceof Error ? e.message : String(e);
+      setError(translateError(t, message));
     }
   };
 
-  return (
-    <main className="mx-auto max-w-3xl p-6">
-      <h1 className="font-semibold text-2xl tracking-tight">Finance</h1>
-      <p className="mt-1 text-neutral-600 text-sm dark:text-neutral-400">
-        Expenses and a simple cash session (open / close with counted balances).
-      </p>
+  const columns = useMemo<ColumnDef<ExpenseRow>[]>(
+    () => [
+      {
+        accessorKey: "category",
+        cell: ({ row }) => (
+          <>
+            {categoryLabel(t, row.original.category)}
+            <div className="text-muted-foreground text-xs">
+              {formatDate(row.original.created_at, locale)}
+            </div>
+          </>
+        ),
+        header: t("finance.title"),
+      },
+      {
+        accessorKey: "amount",
+        cell: ({ row }) =>
+          formatMoney(
+            row.original.amount,
+            row.original.currency_code as "AFN" | "USD",
+            locale
+          ),
+        header: t("products.salePrice"),
+      },
+      {
+        cell: ({ row }) => (
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setEditRow(row.original)}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              {t("common.edit")}
+            </Button>
+            <Button
+              onClick={() => {
+                deleteExpense(row.original.id)
+                  .then(refresh)
+                  .catch(() => undefined);
+              }}
+              size="sm"
+              type="button"
+              variant="destructive"
+            >
+              {t("common.delete")}
+            </Button>
+          </div>
+        ),
+        enableSorting: false,
+        header: t("common.actions"),
+        id: "actions",
+      },
+    ],
+    [locale, refresh, t]
+  );
 
-      {!isTauri() ? (
-        <p className="mt-4 text-amber-800 text-sm dark:text-amber-200">
-          Run{" "}
-          <code className="rounded bg-neutral-100 px-1 dark:bg-neutral-900">
-            pnpm tauri dev
-          </code>{" "}
-          for SQLite.
+  return (
+    <main className="mx-auto max-w-3xl px-6 pb-6">
+      <PageHeader>
+        <PageTitle href="/finance">{t("finance.title")}</PageTitle>
+        <p className="mt-1 text-muted-foreground text-sm">
+          {t("finance.addExpense")}
         </p>
-      ) : null}
+      </PageHeader>
 
       {error ? (
-        <p className="mt-4 text-red-600 text-sm" role="alert">
-          {error}
-        </p>
+        <Alert className="mt-4" variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
 
-      <section className="mt-8 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium text-lg">Cash session</h2>
-        {session ? (
-          <div className="mt-3 space-y-3 text-sm">
-            <p>
-              Open since{" "}
-              <span className="font-mono text-xs">
-                {new Date(session.opened_at).toLocaleString()}
-              </span>
-            </p>
-            <p>Opening balance: {Number(session.opening_balance).toFixed(2)}</p>
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="flex flex-col gap-1">
-                <label
-                  className="text-neutral-600 text-xs dark:text-neutral-400"
-                  htmlFor={closeBalId}
-                >
-                  Closing count
-                </label>
-                <input
-                  id={closeBalId}
-                  type="number"
-                  min={0}
-                  step="any"
-                  className="w-36 rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-600"
-                  value={closingBalance}
-                  onChange={(e) => {
-                    setClosingBalance(Number.parseFloat(e.target.value) || 0);
-                  }}
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>{t("finance.addExpense")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <FieldGroup>
+            <Field>
+              <Label htmlFor={catId}>{t("finance.title")}</Label>
+              <Select onValueChange={setCategory} value={category}>
+                <SelectTrigger id={catId}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRESETS.map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {t(CATEGORY_KEYS[p])}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <div className="flex gap-4">
+              <Field className="min-w-0 flex-1">
+                <Label htmlFor={amtId}>{t("products.salePrice")}</Label>
+                <NumberInput
+                  id={amtId}
+                  onValueChange={setAmount}
+                  value={amount}
                 />
-              </div>
-              <button
-                type="button"
-                disabled={busy || !isTauri()}
-                className="rounded-md bg-neutral-900 px-3 py-2 text-sm text-white dark:bg-neutral-100 dark:text-neutral-900"
-                onClick={() => {
-                  void closeSession();
-                }}
-              >
-                Close session
-              </button>
+              </Field>
+              <Field className="w-28">
+                <Label>{t("common.currency.afn")}</Label>
+                <Select
+                  onValueChange={(v) => setCurrency(v as "AFN" | "USD")}
+                  value={currency}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="AFN">AFN</SelectItem>
+                    <SelectItem value="USD">USD</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
             </div>
-          </div>
-        ) : (
-          <div className="mt-3 flex flex-wrap items-end gap-3">
-            <div className="flex flex-col gap-1">
-              <label
-                className="text-neutral-600 text-xs dark:text-neutral-400"
-                htmlFor={openBalId}
-              >
-                Opening balance
-              </label>
-              <input
-                id={openBalId}
-                type="number"
-                min={0}
-                step="any"
-                className="w-36 rounded-md border border-neutral-300 px-2 py-2 dark:border-neutral-600"
-                value={openingBalance}
-                onChange={(e) => {
-                  setOpeningBalance(Number.parseFloat(e.target.value) || 0);
-                }}
+            <Field>
+              <Label htmlFor={noteId}>{t("common.note")}</Label>
+              <Input
+                id={noteId}
+                onChange={(e) => setExpNote(e.target.value)}
+                value={expNote}
               />
-            </div>
-            <div className="flex min-w-[10rem] flex-col gap-1">
-              <label
-                className="text-neutral-600 text-xs dark:text-neutral-400"
-                htmlFor={openNoteId}
-              >
-                Note
-              </label>
-              <input
-                id={openNoteId}
-                className="rounded-md border border-neutral-300 px-2 py-2 text-sm dark:border-neutral-600"
-                value={sessionNote}
-                onChange={(e) => {
-                  setSessionNote(e.target.value);
-                }}
-              />
-            </div>
-            <button
-              type="button"
-              disabled={busy || !isTauri()}
-              className="rounded-md bg-neutral-900 px-3 py-2 text-sm text-white dark:bg-neutral-100 dark:text-neutral-900"
+            </Field>
+            <Button
+              data-icon="inline-start"
+              disabled={busy}
               onClick={() => {
-                void openSession();
+                addExpense().catch(() => undefined);
               }}
+              type="button"
             >
-              Open session
-            </button>
-          </div>
-        )}
-      </section>
+              <Plus aria-hidden />
+              {t("common.add")}
+            </Button>
+          </FieldGroup>
+        </CardContent>
+      </Card>
 
-      <section className="mt-8 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-        <h2 className="font-medium text-lg">New expense</h2>
-        <div className="mt-3 flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1">
-            <label
-              className="text-neutral-600 text-xs dark:text-neutral-400"
-              htmlFor={catId}
-            >
-              Category
-            </label>
-            <input
-              id={catId}
-              className="rounded-md border border-neutral-300 px-2 py-2 text-sm dark:border-neutral-600"
-              value={category}
-              onChange={(e) => {
-                setCategory(e.target.value);
-              }}
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label
-              className="text-neutral-600 text-xs dark:text-neutral-400"
-              htmlFor={amtId}
-            >
-              Amount
-            </label>
-            <input
-              id={amtId}
-              type="number"
-              min={0}
-              step="any"
-              className="w-32 rounded-md border border-neutral-300 px-2 py-2 text-sm dark:border-neutral-600"
-              value={amount}
-              onChange={(e) => {
-                setAmount(Number.parseFloat(e.target.value) || 0);
-              }}
-            />
-          </div>
-          <div className="flex min-w-[8rem] flex-1 flex-col gap-1">
-            <label
-              className="text-neutral-600 text-xs dark:text-neutral-400"
-              htmlFor={noteId}
-            >
-              Note
-            </label>
-            <input
-              id={noteId}
-              className="rounded-md border border-neutral-300 px-2 py-2 text-sm dark:border-neutral-600"
-              value={expNote}
-              onChange={(e) => {
-                setExpNote(e.target.value);
-              }}
-            />
-          </div>
-          <button
-            type="button"
-            disabled={busy || !category.trim() || amount <= 0 || !isTauri()}
-            className="rounded-md bg-neutral-900 px-3 py-2 text-sm text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
-            onClick={() => {
-              void addExpense();
-            }}
-          >
-            Save expense
-          </button>
-        </div>
-      </section>
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>{t("finance.title")}</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <DataTable
+            columns={columns}
+            data={expenses}
+            getSearchText={(expense) =>
+              [categoryLabel(t, expense.category), expense.note ?? ""].join(" ")
+            }
+          />
+        </CardContent>
+      </Card>
 
-      <section className="mt-10">
-        <h2 className="font-medium text-lg">Recent expenses</h2>
-        <ul className="mt-3 divide-y divide-neutral-200 rounded-lg border border-neutral-200 dark:divide-neutral-800 dark:border-neutral-800">
-          {expenses.length === 0 ? (
-            <li className="px-3 py-6 text-neutral-500 text-sm">None yet.</li>
-          ) : (
-            expenses.map((x) => (
-              <li key={x.id} className="flex justify-between px-3 py-2 text-sm">
-                <span>
-                  <span className="font-medium">{x.category}</span>
-                  {x.note ? (
-                    <span className="text-neutral-500 text-xs">
-                      {" "}
-                      — {x.note}
-                    </span>
-                  ) : null}
-                </span>
-                <span className="font-mono">{Number(x.amount).toFixed(2)}</span>
-              </li>
-            ))
-          )}
-        </ul>
-      </section>
+      <Dialog onOpenChange={() => setEditRow(null)} open={editRow !== null}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("finance.editExpense")}</DialogTitle>
+          </DialogHeader>
+          {editRow ? (
+            <FieldGroup>
+              <Field>
+                <Label>{t("finance.title")}</Label>
+                <Input
+                  onChange={(ev) =>
+                    setEditRow({ ...editRow, category: ev.target.value })
+                  }
+                  value={editRow.category}
+                />
+              </Field>
+              <Field>
+                <Label>{t("products.salePrice")}</Label>
+                <NumberInput
+                  onValueChange={(amount) => setEditRow({ ...editRow, amount })}
+                  value={editRow.amount}
+                />
+              </Field>
+            </FieldGroup>
+          ) : null}
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                saveEdit().catch(() => undefined);
+              }}
+              type="button"
+            >
+              {t("common.save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

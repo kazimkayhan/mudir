@@ -5,12 +5,12 @@ import type { MutableSaleStore, SaleRecord } from "@/domain/types";
 
 function emptyStore(): MutableSaleStore {
   return {
-    products: new Map(),
-    sales: [],
-    saleItems: new Map(),
-    stockMovements: [],
-    payments: [],
     auditLogs: [],
+    payments: [],
+    products: new Map(),
+    saleItems: new Map(),
+    sales: [],
+    stockMovements: [],
   };
 }
 
@@ -20,14 +20,14 @@ function storeAfterSale(): { store: MutableSaleStore; sale: SaleRecord } {
   const r = createSaleAtomic(store, {
     cashierId: "u1",
     discountAmount: 0,
-    taxAmount: 0,
-    paidAmount: 100,
     items: [{ productId: "p1", quantity: 2, unitPrice: 50 }],
+    paidAmount: 100,
+    taxAmount: 0,
   });
   if (!r.ok) {
     throw new Error("setup sale failed");
   }
-  return { store, sale: r.sale };
+  return { sale: r.sale, store };
 }
 
 describe("returnSaleAtomic", () => {
@@ -36,8 +36,8 @@ describe("returnSaleAtomic", () => {
     expect(store.products.get("p1")?.onHandQty).toBe(8);
 
     const ret = returnSaleAtomic(store, {
-      originalSaleId: sale.id,
       cashierId: "u1",
+      originalSaleId: sale.id,
     });
     expect(ret.ok).toBe(true);
     expect(store.products.get("p1")?.onHandQty).toBe(10);
@@ -51,29 +51,29 @@ describe("returnSaleAtomic", () => {
   test("rejects when sale already returned", () => {
     const { store, sale } = storeAfterSale();
     expect(
-      returnSaleAtomic(store, { originalSaleId: sale.id, cashierId: "u1" }).ok,
+      returnSaleAtomic(store, { cashierId: "u1", originalSaleId: sale.id }).ok
     ).toBe(true);
     const beforeQty = store.products.get("p1")?.onHandQty;
     const beforeReturnCount = store.stockMovements.filter(
-      (m) => m.type === "return",
+      (m) => m.type === "return"
     ).length;
 
     const ret = returnSaleAtomic(store, {
-      originalSaleId: sale.id,
       cashierId: "u1",
+      originalSaleId: sale.id,
     });
     expect(ret.ok).toBe(false);
     expect(store.products.get("p1")?.onHandQty).toBe(beforeQty);
     expect(store.stockMovements.filter((m) => m.type === "return").length).toBe(
-      beforeReturnCount,
+      beforeReturnCount
     );
   });
 
   test("rejects unknown sale id", () => {
     const { store } = storeAfterSale();
     const ret = returnSaleAtomic(store, {
-      originalSaleId: "missing",
       cashierId: "u1",
+      originalSaleId: "missing",
     });
     expect(ret.ok).toBe(false);
   });

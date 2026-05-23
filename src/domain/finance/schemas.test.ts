@@ -8,8 +8,8 @@ import {
 describe("expenseWriteSchema", () => {
   test("parses valid expense", () => {
     const v = expenseWriteSchema.parse({
-      category: "rent",
       amount: 99.5,
+      category: "rent",
       note: "April",
     });
     expect(v.amount).toBe(99.5);
@@ -19,7 +19,7 @@ describe("expenseWriteSchema", () => {
 describe("cashSessionOpenSchema", () => {
   test("allows zero opening", () => {
     expect(
-      cashSessionOpenSchema.parse({ openingBalance: 0 }).openingBalance,
+      cashSessionOpenSchema.parse({ openingBalance: 0 }).openingBalance
     ).toBe(0);
   });
 });

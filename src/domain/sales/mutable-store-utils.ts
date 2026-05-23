@@ -5,7 +5,7 @@ import type {
 } from "@/domain/types";
 
 export function cloneMutableSaleStore(
-  store: MutableSaleStore,
+  store: MutableSaleStore
 ): MutableSaleStore {
   const products = new Map<string, ProductState>();
   for (const [id, p] of store.products) {
@@ -15,22 +15,22 @@ export function cloneMutableSaleStore(
   for (const [saleId, lines] of store.saleItems) {
     saleItems.set(
       saleId,
-      lines.map((line) => ({ ...line })),
+      lines.map((line) => ({ ...line }))
     );
   }
   return {
-    products,
-    sales: store.sales.map((s) => ({ ...s })),
-    saleItems,
-    stockMovements: store.stockMovements.map((m) => ({ ...m })),
-    payments: store.payments.map((p) => ({ ...p })),
     auditLogs: store.auditLogs.map((a) => ({ ...a })),
+    payments: store.payments.map((p) => ({ ...p })),
+    products,
+    saleItems,
+    sales: store.sales.map((s) => ({ ...s })),
+    stockMovements: store.stockMovements.map((m) => ({ ...m })),
   };
 }
 
 export function restoreMutableSaleStore(
   target: MutableSaleStore,
-  snapshot: MutableSaleStore,
+  snapshot: MutableSaleStore
 ): void {
   target.products = snapshot.products;
   target.sales = snapshot.sales;

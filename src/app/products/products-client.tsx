@@ -1,28 +1,51 @@
 "use client";
 
+import type { ColumnDef, SortingState } from "@tanstack/react-table";
+import { Pencil, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import {
-  type ColumnDef,
-  flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  type SortingState,
-  useReactTable,
-} from "@tanstack/react-table";
-import { isTauri } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  deleteProductById,
   listProducts,
   type ProductRow,
+  softDeleteProductById,
 } from "@/bridge/products";
-import { ProductEditorDialog } from "./ProductEditorDialog";
+import { PageTitle } from "@/components/app-icons";
+import { DataTable } from "@/components/data-table";
+import { PageHeader } from "@/components/page-header";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Field } from "@/components/ui/field";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { ProductCondition } from "@/domain/products/schemas";
+import { useI18n } from "@/i18n/hooks";
+import { formatDate, formatMoney } from "@/lib/format";
+import { alertAction, confirmAction } from "@/lib/native-dialog";
+import { isMudirDesktop } from "@/lib/runtime";
+import { translateError } from "@/lib/translate-error";
+import { ProductEditorDialog } from "./product-editor-dialog";
+import { ProductImportDialog } from "./product-import-dialog";
+
+const DEFAULT_SORTING: SortingState = [{ desc: true, id: "created_at" }];
+
+type ConditionFilter = "all" | ProductCondition;
 
 export function ProductsClient() {
+  const { t, locale } = useI18n();
+  const conditionFilterId = useId();
   const [data, setData] = useState<ProductRow[]>([]);
-  const [filter, setFilter] = useState("");
+  const [conditionFilter, setConditionFilter] =
+    useState<ConditionFilter>("all");
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [sorting, setSorting] = useState<SortingState>([]);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<"create" | "edit">("create");
   const [editRow, setEditRow] = useState<ProductRow | null>(null);
 
@@ -32,241 +55,269 @@ export function ProductsClient() {
       const rows = await listProducts();
       setData(rows);
     } catch (e: unknown) {
-      setLoadError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      setLoadError(translateError(t, message));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
-    void refresh();
+    refresh().catch(() => undefined);
   }, [refresh]);
 
-  const filtered = useMemo(() => {
-    const q = filter.trim().toLowerCase();
-    if (q.length === 0) {
+  const tableData = useMemo(() => {
+    if (conditionFilter === "all") {
       return data;
     }
-    return data.filter((p) => {
-      const sku = p.sku?.toLowerCase() ?? "";
-      return (
-        p.name.toLowerCase().includes(q) ||
-        sku.includes(q) ||
-        p.id.toLowerCase().includes(q)
-      );
-    });
-  }, [data, filter]);
+    return data.filter((product) => product.condition === conditionFilter);
+  }, [conditionFilter, data]);
+
+  const conditionLabel = useCallback(
+    (condition: ProductCondition) =>
+      condition === "used"
+        ? t("products.condition.used")
+        : t("products.condition.new"),
+    [t]
+  );
 
   const columns = useMemo<ColumnDef<ProductRow>[]>(
     () => [
       {
         accessorKey: "name",
-        header: "Name",
+        header: t("pos.pickProduct"),
       },
       {
         accessorKey: "sku",
-        header: "SKU",
         cell: ({ getValue }) => {
           const v = getValue() as string | null;
           return v && v.length > 0 ? v : "—";
         },
+        header: t("common.sku"),
       },
       {
-        accessorKey: "on_hand_qty",
-        header: "Qty",
+        accessorKey: "condition",
+        cell: ({ row }) => (
+          <Badge
+            variant={
+              row.original.condition === "used" ? "secondary" : "outline"
+            }
+          >
+            {conditionLabel(row.original.condition)}
+          </Badge>
+        ),
+        header: t("products.condition.label"),
+      },
+      {
+        accessorKey: "sale_price",
+        cell: ({ row }) =>
+          formatMoney(
+            row.original.sale_price,
+            (row.original.currency as "AFN" | "USD") ?? "AFN",
+            locale
+          ),
+        header: t("products.salePrice"),
+        sortingFn: "basic",
+      },
+      {
+        accessorKey: "cost_price",
+        cell: ({ row }) =>
+          formatMoney(
+            row.original.cost_price,
+            (row.original.currency as "AFN" | "USD") ?? "AFN",
+            locale
+          ),
+        header: t("products.costPrice"),
+        sortingFn: "basic",
       },
       {
         accessorKey: "created_at",
-        header: "Created",
-        sortingFn: "alphanumeric",
-        cell: ({ getValue }) => {
-          const v = getValue() as string;
-          try {
-            return new Date(v).toLocaleString();
-          } catch {
-            return v;
-          }
-        },
+        cell: ({ getValue }) => formatDate(getValue() as string, locale),
+        header: t("inventory.col.date"),
+        sortingFn: "datetime",
       },
       {
-        id: "actions",
-        header: "",
-        enableSorting: false,
+        accessorKey: "on_hand_qty",
+        header: t("products.onHand"),
+        sortingFn: "basic",
+      },
+      {
         cell: ({ row }) => (
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="text-neutral-700 text-xs underline dark:text-neutral-300"
+            <Button
+              className="h-auto px-0"
+              data-icon="inline-start"
               onClick={() => {
                 setEditorMode("edit");
                 setEditRow(row.original);
                 setEditorOpen(true);
               }}
-            >
-              Edit
-            </button>
-            <button
+              size="sm"
               type="button"
-              className="text-red-700 text-xs underline dark:text-red-400"
+              variant="link"
+            >
+              <Pencil aria-hidden className="size-3.5" />
+              {t("common.edit")}
+            </Button>
+            <Button
+              className="h-auto px-0 text-destructive"
+              data-icon="inline-start"
               onClick={() => {
-                void (async () => {
-                  const ok = globalThis.confirm(
-                    `Delete “${row.original.name}”? This cannot be undone.`,
+                (async () => {
+                  const ok = await confirmAction(
+                    t("products.deleteConfirm"),
+                    t("common.delete")
                   );
                   if (!ok) {
                     return;
                   }
                   try {
-                    await deleteProductById(row.original.id);
+                    await softDeleteProductById(row.original.id);
                     await refresh();
                   } catch (e: unknown) {
-                    globalThis.alert(
-                      e instanceof Error ? e.message : String(e),
+                    const message = e instanceof Error ? e.message : String(e);
+                    await alertAction(
+                      translateError(t, message),
+                      t("common.error"),
+                      "error"
                     );
                   }
-                })();
+                })().catch(() => undefined);
               }}
+              size="sm"
+              type="button"
+              variant="link"
             >
-              Delete
-            </button>
+              <Trash2 aria-hidden />
+              {t("common.delete")}
+            </Button>
           </div>
         ),
+        enableSorting: false,
+        header: t("common.actions"),
+        id: "actions",
       },
     ],
-    [refresh],
+    [conditionLabel, locale, refresh, t]
   );
 
-  const table = useReactTable({
-    data: filtered,
-    columns,
-    state: { sorting },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  });
-
   return (
-    <main className="mx-auto max-w-5xl p-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="font-semibold text-2xl tracking-tight">Products</h1>
-          <p className="mt-1 text-neutral-600 text-sm dark:text-neutral-400">
-            TanStack Table (sortable columns) + React Hook Form + Zod. Data:
-            SQLite via Tauri SQL plugin.
-          </p>
+    <main className="mx-auto max-w-6xl px-6 pb-6">
+      <PageHeader>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <PageTitle href="/products">{t("products.title")}</PageTitle>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              data-icon="inline-start"
+              onClick={() => {
+                setImportOpen(true);
+              }}
+              type="button"
+              variant="outline"
+            >
+              <Upload aria-hidden />
+              {t("products.import.action")}
+            </Button>
+            <Button
+              data-icon="inline-start"
+              onClick={() => {
+                setEditorMode("create");
+                setEditRow(null);
+                setEditorOpen(true);
+              }}
+              type="button"
+            >
+              <Plus aria-hidden />
+              {t("products.add")}
+            </Button>
+          </div>
         </div>
-        <button
-          type="button"
-          className="rounded-md bg-neutral-900 px-3 py-2 text-sm text-white dark:bg-neutral-100 dark:text-neutral-900"
-          onClick={() => {
-            setEditorMode("create");
-            setEditRow(null);
-            setEditorOpen(true);
-          }}
-        >
-          Add product
-        </button>
-      </div>
+      </PageHeader>
 
-      {!isTauri() ? (
-        <p className="mt-4 text-amber-800 text-sm dark:text-amber-200">
-          Run{" "}
-          <code className="rounded bg-neutral-100 px-1 dark:bg-neutral-900">
-            pnpm tauri dev
-          </code>{" "}
-          to use the local database.
-        </p>
-      ) : null}
+      {isMudirDesktop() ? null : (
+        <Alert className="mt-4">
+          <AlertDescription>{t("common.db.tauriOnly")}</AlertDescription>
+        </Alert>
+      )}
 
       {loadError ? (
-        <p className="mt-4 text-red-600 text-sm" role="alert">
-          {loadError}
-        </p>
+        <Alert className="mt-4" variant="destructive">
+          <AlertDescription>{loadError}</AlertDescription>
+        </Alert>
       ) : null}
 
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <label className="flex max-w-md flex-1 flex-col gap-1 text-sm">
-          <span className="text-neutral-600 dark:text-neutral-400">Filter</span>
-          <input
-            type="search"
-            value={filter}
-            onChange={(e) => {
-              setFilter(e.target.value);
-            }}
-            placeholder="Name, SKU, or id…"
-            className="rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-600"
-          />
-        </label>
-        <button
-          type="button"
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-600"
+      <div className="mt-6 flex justify-end">
+        <Button
+          data-icon="inline-start"
           onClick={() => {
-            void refresh();
+            refresh().catch(() => undefined);
           }}
+          type="button"
+          variant="outline"
         >
-          Refresh
-        </button>
+          <RefreshCw aria-hidden />
+          {t("common.refresh")}
+        </Button>
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-        <table className="w-full min-w-[640px] border-collapse text-left text-sm">
-          <thead className="border-neutral-200 border-b bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-950">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <th key={header.id} className="px-3 py-2 font-medium">
-                    {header.isPlaceholder ? null : header.column.getCanSort() ? (
-                      <button
-                        type="button"
-                        className="inline-flex cursor-pointer select-none items-center gap-1"
-                        onClick={header.column.getToggleSortingHandler()}
-                      >
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext(),
-                        )}
-                        {header.column.getIsSorted() === "asc" ? " ▲" : null}
-                        {header.column.getIsSorted() === "desc" ? " ▼" : null}
-                      </button>
-                    ) : (
-                      flexRender(
-                        header.column.columnDef.header,
-                        header.getContext(),
-                      )
-                    )}
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {table.getRowModel().rows.length === 0 ? (
-              <tr>
-                <td
-                  className="px-3 py-8 text-center text-neutral-500"
-                  colSpan={columns.length}
+      <Card className="mt-4">
+        <CardContent className="p-0">
+          <DataTable
+            columns={columns}
+            data={tableData}
+            emptyMessage={t("products.empty")}
+            getSearchText={(product) =>
+              [
+                product.name,
+                product.sku ?? "",
+                conditionLabel(product.condition),
+              ].join(" ")
+            }
+            initialSorting={DEFAULT_SORTING}
+            searchPlaceholder={t("products.search")}
+            toolbar={
+              <Field className="min-w-[10rem]">
+                <Label htmlFor={conditionFilterId}>
+                  {t("products.filter.condition")}
+                </Label>
+                <Select
+                  onValueChange={(value) => {
+                    setConditionFilter(
+                      value === "used" || value === "new" ? value : "all"
+                    );
+                  }}
+                  value={conditionFilter}
                 >
-                  No products. Add one or seed from the dashboard.
-                </td>
-              </tr>
-            ) : (
-              table.getRowModel().rows.map((row) => (
-                <tr
-                  key={row.id}
-                  className="border-neutral-100 border-b dark:border-neutral-900"
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-3 py-2 align-top">
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext(),
-                      )}
-                    </td>
-                  ))}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                  <SelectTrigger className="w-[10rem]" id={conditionFilterId}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">
+                      {t("products.filter.all")}
+                    </SelectItem>
+                    <SelectItem value="new">
+                      {t("products.condition.new")}
+                    </SelectItem>
+                    <SelectItem value="used">
+                      {t("products.condition.used")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            }
+          />
+        </CardContent>
+      </Card>
+
+      <ProductImportDialog
+        onClose={() => {
+          setImportOpen(false);
+        }}
+        onImported={() => {
+          refresh().catch(() => undefined);
+        }}
+        open={importOpen}
+      />
 
       <ProductEditorDialog
         initial={editRow}
@@ -276,7 +327,7 @@ export function ProductsClient() {
           setEditRow(null);
         }}
         onSaved={() => {
-          void refresh();
+          refresh().catch(() => undefined);
         }}
         open={editorOpen}
       />

@@ -1,7 +1,6 @@
 "use client";
 
-import { isTauri } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -10,7 +9,6 @@ import {
   Legend,
   Pie,
   PieChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -21,23 +19,69 @@ import {
   fetchSalesDailySeries,
   type SalesDayPoint,
 } from "@/bridge/reports";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  type ChartConfig,
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
+import { useI18n } from "@/i18n/hooks";
+import { isMudirDesktop } from "@/lib/runtime";
+import { translateError } from "@/lib/translate-error";
 
 const CHART_HEIGHT = 220;
+
 const PIE_COLORS = [
-  "#404040",
-  "#737373",
-  "#a3a3a3",
-  "#d4d4d4",
-  "#171717",
-  "#525252",
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+  "var(--chart-1)",
 ];
 
 export function DashboardCharts() {
+  const { t } = useI18n();
   const salesTitleId = useId();
   const expensesTitleId = useId();
+  const [mounted, setMounted] = useState(false);
   const [salesSeries, setSalesSeries] = useState<SalesDayPoint[]>([]);
   const [expenses, setExpenses] = useState<ExpenseCategoryPoint[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  const salesChartConfig = useMemo(
+    () =>
+      ({
+        total: {
+          color: "var(--chart-1)",
+          label: t("common.total"),
+        },
+      }) satisfies ChartConfig,
+    [t]
+  );
+
+  const expenseChartConfig = useMemo(
+    () =>
+      ({
+        category1: {
+          color: "var(--chart-1)",
+          label: t("dashboard.charts.expenses"),
+        },
+        category2: { color: "var(--chart-2)" },
+        category3: { color: "var(--chart-3)" },
+        category4: { color: "var(--chart-4)" },
+        category5: { color: "var(--chart-5)" },
+        value: { label: t("common.total") },
+      }) satisfies ChartConfig,
+    [t]
+  );
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const load = useCallback(async () => {
     setError(null);
@@ -49,12 +93,13 @@ export function DashboardCharts() {
       setSalesSeries(s);
       setExpenses(e);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      setError(translateError(t, message));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
-    void load();
+    load().catch(() => undefined);
   }, [load]);
 
   const salesChartData = salesSeries.map((p) => ({
@@ -68,136 +113,136 @@ export function DashboardCharts() {
   }));
 
   return (
-    <section className="mt-10 space-y-8" aria-label="Charts">
+    <section aria-label={t("dashboard.title")} className="mt-10 space-y-8">
       {error ? (
-        <p className="text-red-600 text-sm" role="alert">
-          {error}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
 
-      <div>
-        <h2 className="font-medium text-lg" id={salesTitleId}>
-          Sales (last 14 days, excl. returns)
-        </h2>
-        <p className="mt-1 text-neutral-600 text-xs dark:text-neutral-400">
-          From{" "}
-          <code className="rounded bg-neutral-100 px-1 dark:bg-neutral-900">
-            sales
-          </code>{" "}
-          table — empty until you record POS sales in Tauri.
-        </p>
-        <div
-          className="mt-3 w-full rounded-lg border border-neutral-200 p-2 dark:border-neutral-800"
-          style={{ height: CHART_HEIGHT }}
-        >
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={salesChartData}
-              margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-            >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                className="stroke-neutral-200 dark:stroke-neutral-800"
-              />
-              <XAxis
-                dataKey="label"
-                tick={{ fontSize: 11 }}
-                className="text-neutral-500"
-              />
-              <YAxis
-                tick={{ fontSize: 11 }}
-                width={40}
-                className="text-neutral-500"
-              />
-              <Tooltip
-                contentStyle={{
-                  borderRadius: 8,
-                  border: "1px solid var(--color-neutral-200)",
-                  fontSize: 12,
-                }}
-                formatter={(value) => [
-                  typeof value === "number"
-                    ? value.toFixed(2)
-                    : String(value ?? ""),
-                  "Total",
-                ]}
-              />
-              <Bar
-                dataKey="total"
-                fill="var(--color-neutral-800)"
-                radius={[4, 4, 0, 0]}
-                className="dark:fill-neutral-200"
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div>
-        <h2 className="font-medium text-lg" id={expensesTitleId}>
-          Expenses by category
-        </h2>
-        <p className="mt-1 text-neutral-600 text-xs dark:text-neutral-400">
-          Add expenses under Finance. Pie shows share of recorded totals.
-        </p>
-        {expenseChartData.length === 0 ? (
-          <p className="mt-4 text-neutral-500 text-sm">No expenses yet.</p>
-        ) : (
-          <div
-            className="mt-3 w-full rounded-lg border border-neutral-200 p-2 dark:border-neutral-800"
+      <Card>
+        <CardHeader>
+          <CardTitle id={salesTitleId}>
+            {t("dashboard.charts.salesTrend")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer
+            className="min-h-[220px] w-full"
+            config={salesChartConfig}
             style={{ height: CHART_HEIGHT }}
           >
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={expenseChartData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={44}
-                  outerRadius={72}
-                  paddingAngle={2}
-                  label={({ name, percent }) =>
-                    `${name} (${((percent ?? 0) * 100).toFixed(0)}%)`
-                  }
-                >
-                  {expenseChartData.map((row, i) => (
-                    <Cell
-                      key={row.name}
-                      fill={PIE_COLORS[i % PIE_COLORS.length] ?? "#737373"}
+            {mounted ? (
+              <BarChart
+                data={salesChartData}
+                margin={{ bottom: 0, left: 0, right: 8, top: 8 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis
+                  axisLine={false}
+                  dataKey="label"
+                  tick={{ fontSize: 11 }}
+                  tickLine={false}
+                />
+                <YAxis
+                  axisLine={false}
+                  tick={{ fontSize: 11 }}
+                  tickLine={false}
+                  width={40}
+                />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(value) => [
+                        typeof value === "number"
+                          ? value.toFixed(2)
+                          : String(value ?? ""),
+                        t("common.total"),
+                      ]}
                     />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(value) =>
-                    typeof value === "number"
-                      ? value.toFixed(2)
-                      : String(value ?? "")
                   }
                 />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </div>
+                <Bar
+                  dataKey="total"
+                  fill="var(--color-total)"
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            ) : null}
+          </ChartContainer>
+        </CardContent>
+      </Card>
 
-      {!isTauri() ? (
-        <p className="text-amber-800 text-sm dark:text-amber-200">
-          Charts use live SQLite in Tauri; in the browser preview series stay
-          empty.
-        </p>
-      ) : (
-        <button
-          type="button"
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-600"
+      <Card>
+        <CardHeader>
+          <CardTitle id={expensesTitleId}>
+            {t("dashboard.charts.expenses")}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {expenseChartData.length === 0 ? (
+            <p className="mt-4 text-muted-foreground text-sm">
+              {t("dashboard.charts.noData")}
+            </p>
+          ) : (
+            <ChartContainer
+              className="min-h-[220px] w-full"
+              config={expenseChartConfig}
+              style={{ height: CHART_HEIGHT }}
+            >
+              {mounted ? (
+                <PieChart>
+                  <Pie
+                    cx="50%"
+                    cy="50%"
+                    data={expenseChartData}
+                    dataKey="value"
+                    innerRadius={44}
+                    label={({ name, percent }) =>
+                      `${name} (${((percent ?? 0) * 100).toFixed(0)}%)`
+                    }
+                    nameKey="name"
+                    outerRadius={72}
+                    paddingAngle={2}
+                  >
+                    {expenseChartData.map((row, i) => (
+                      <Cell
+                        fill={
+                          PIE_COLORS[i % PIE_COLORS.length] ?? "var(--chart-1)"
+                        }
+                        key={row.name}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value) =>
+                      typeof value === "number"
+                        ? value.toFixed(2)
+                        : String(value ?? "")
+                    }
+                  />
+                  <Legend />
+                </PieChart>
+              ) : null}
+            </ChartContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      {isMudirDesktop() ? (
+        <Button
           onClick={() => {
-            void load();
+            load().catch(() => undefined);
           }}
+          type="button"
+          variant="outline"
         >
-          Refresh charts
-        </button>
+          {t("common.refresh")}
+        </Button>
+      ) : (
+        <Alert>
+          <AlertDescription>{t("common.db.tauriOnly")}</AlertDescription>
+        </Alert>
       )}
     </section>
   );

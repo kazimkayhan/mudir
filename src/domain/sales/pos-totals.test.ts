@@ -14,22 +14,22 @@ describe("computePosTotals", () => {
     const { subtotal, total } = computePosTotals(items, discount, tax);
 
     const store: MutableSaleStore = {
+      auditLogs: [],
+      payments: [],
       products: new Map([
         ["a", { id: "a", name: "A", onHandQty: 99 }],
         ["b", { id: "b", name: "B", onHandQty: 99 }],
       ]),
-      sales: [],
       saleItems: new Map(),
+      sales: [],
       stockMovements: [],
-      payments: [],
-      auditLogs: [],
     };
     const r = createSaleAtomic(store, {
       cashierId: "c",
       discountAmount: discount,
-      taxAmount: tax,
-      paidAmount: total,
       items,
+      paidAmount: total,
+      taxAmount: tax,
     });
     expect(r.ok).toBe(true);
     if (r.ok) {
@@ -42,7 +42,7 @@ describe("computePosTotals", () => {
     const { total } = computePosTotals(
       [{ quantity: 1, unitPrice: 10 }],
       100,
-      0,
+      0
     );
     expect(total).toBe(0);
   });

@@ -1,10 +1,4 @@
 {
-  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
-  "vcs": {
-    "enabled": false,
-    "clientKind": "git",
-    "useIgnoreFile": true
-  },
   "files": {
     "ignoreUnknown": false,
     "includes": [
@@ -16,70 +10,31 @@
       "./*.mjs",
       "!!dist",
       "!!src-tauri",
-      "!!node_modules"
+      "!!node_modules",
+      "!!public/pdf.worker.min.mjs",
+      "!!drizzle"
     ]
   },
-  "formatter": {
+  "extends": [
+    "ultracite/biome/core",
+    "ultracite/biome/react",
+    "ultracite/biome/next"
+  ],
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
     "enabled": true,
-    "indentStyle": "space",
-    "indentWidth": 2
+    "clientKind": "git",
+    "useIgnoreFile": true
   },
   "assist": {
     "actions": {
       "source": {
-        "organizeImports": "on"
+        "organizeImports": "on",
+        "useSortedAttributes": "on",
+        "useSortedKeys": "on",
+        "useSortedProperties": "on"
       }
-    }
-  },
-  "linter": {
-    "enabled": true,
-    "domains": {
-      "project": "all",
-      "react": "all",
-      "next": "all"
     },
-    "rules": {
-      "recommended": true,
-      "correctness": {
-        "noUnresolvedImports": "off",
-        "useHookAtTopLevel": "error",
-        "useImportExtensions": "off"
-      },
-      "nursery": {
-        "noFloatingPromises": "error",
-        "useAwaitThenable": "error"
-      },
-      "suspicious": {
-        "useGoogleFontDisplay": "error",
-        "noDocumentImportInPage": "error",
-        "noHeadImportInDocument": "error"
-      },
-      "style": {
-        "noHeadElement": "error",
-        "useComponentExportOnlyModules": {
-          "level": "error",
-          "options": {
-            "allowExportNames": ["metadata"]
-          }
-        }
-      },
-      "performance": {
-        "noImgElement": "off"
-      }
-    }
-  },
-  "css": {
-    "parser": {
-      "tailwindDirectives": true
-    },
-    "formatter": {
-      "quoteStyle": "double"
-    }
-  },
-  "javascript": {
-    "formatter": {
-      "quoteStyle": "double"
-    },
-    "globals": []
+    "enabled": true
   }
 }

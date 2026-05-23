@@ -1,81 +1,86 @@
 export type Role = "owner" | "admin" | "manager" | "cashier";
 
-export type SaleItemInput = {
+export interface SaleItemInput {
   productId: string;
   quantity: number;
   unitPrice: number;
-};
+}
 
-export type CreateSaleInput = {
+export interface CreateSaleInput {
   cashierId: string;
   customerId?: string;
   discountAmount: number;
-  taxAmount: number;
-  paidAmount: number;
   items: SaleItemInput[];
-};
-
-export type SaleRecord = {
-  id: string;
-  cashierId: string;
-  customerId?: string;
-  subtotal: number;
-  discountAmount: number;
-  taxAmount: number;
-  totalAmount: number;
   paidAmount: number;
+  taxAmount: number;
+}
+
+export interface SaleRecord {
+  cashierId: string;
   changeAmount: number;
   createdAt: string;
+  customerId?: string;
+  discountAmount: number;
+  id: string;
+  paidAmount: number;
   /** اگر ست شده باشد، فروش به‌طور کامل برگشت خورده است. */
   returnedAt?: string;
-};
+  subtotal: number;
+  taxAmount: number;
+  totalAmount: number;
+}
 
-export type StockMovementType = "sale" | "return" | "adjustment" | "purchase";
+export type StockMovementType =
+  | "sale"
+  | "return"
+  | "adjustment"
+  | "purchase"
+  | "opening";
 
-export type StockMovementRecord = {
+export interface StockMovementRecord {
+  createdAt: string;
   id: string;
   productId: string;
-  type: StockMovementType;
   quantityDelta: number;
   refId: string;
-  createdAt: string;
-};
+  type: StockMovementType;
+}
 
-export type SaleLineRecord = {
-  saleId: string;
+export interface SaleLineRecord {
   productId: string;
   quantity: number;
-  unitPrice: number;
-};
-
-export type PaymentRecord = {
-  id: string;
   saleId: string;
+  unitPrice: number;
+}
+
+export interface PaymentRecord {
   amount: number;
   createdAt: string;
-};
-
-export type AuditLogRecord = {
   id: string;
-  actorUserId: string;
+  saleId: string;
+}
+
+export interface AuditLogRecord {
   action: string;
+  actorUserId: string;
+  createdAt: string;
   entity: string;
   entityId: string;
+  id: string;
   payload: string;
-  createdAt: string;
-};
+}
 
-export type ProductState = {
+export interface ProductState {
   id: string;
   name: string;
   onHandQty: number;
-};
+}
 
-export type MutableSaleStore = {
-  products: Map<string, ProductState>;
-  sales: SaleRecord[];
-  saleItems: Map<string, SaleLineRecord[]>;
-  stockMovements: StockMovementRecord[];
-  payments: PaymentRecord[];
+export interface MutableSaleStore {
   auditLogs: AuditLogRecord[];
-};
+  payments: PaymentRecord[];
+  products: Map<string, ProductState>;
+  saleItems: Map<string, SaleLineRecord[]>;
+  sales: SaleRecord[];
+  stockMovements: StockMovementRecord[];
+}

@@ -1,15 +1,8 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  type ColumnDef,
-  flexRender,
-  getCoreRowModel,
-  getSortedRowModel,
-  type SortingState,
-  useReactTable,
-} from "@tanstack/react-table";
-import { isTauri } from "@tauri-apps/api/core";
+import type { ColumnDef } from "@tanstack/react-table";
+import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
@@ -18,13 +11,37 @@ import {
   type StockMovementListRow,
 } from "@/bridge/inventory";
 import { listProducts, type ProductRow } from "@/bridge/products";
+import { PageTitle } from "@/components/app-icons";
+import { DataTable } from "@/components/data-table";
+import { PageHeader } from "@/components/page-header";
+import { ProductCombobox } from "@/components/product-combobox";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldGroup } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   formValuesToDelta,
   type InventoryFormValues,
   inventoryFormSchema,
 } from "@/domain/inventory/schemas";
+import { useI18n } from "@/i18n/hooks";
+import { parseNumberInput } from "@/lib/number-input";
+import { isMudirDesktop } from "@/lib/runtime";
+import { translateError } from "@/lib/translate-error";
+
+const MOVEMENT_TYPE_KEYS = {
+  adjustment: "inventory.type.adjustment",
+  opening: "inventory.type.opening",
+  purchase: "inventory.type.purchase",
+  return: "inventory.type.return",
+  sale: "inventory.type.sale",
+} as const;
 
 export function InventoryClient() {
+  const { t, locale } = useI18n();
   const uid = useId();
   const recordHeadingId = `${uid}-record`;
   const historyHeadingId = `${uid}-history`;
@@ -35,7 +52,6 @@ export function InventoryClient() {
   const [movements, setMovements] = useState<StockMovementListRow[]>([]);
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [sorting, setSorting] = useState<SortingState>([]);
 
   const refresh = useCallback(async () => {
     setLoadError(null);
@@ -47,12 +63,13 @@ export function InventoryClient() {
       setMovements(m);
       setProducts(p);
     } catch (e: unknown) {
-      setLoadError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      setLoadError(translateError(t, message));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
-    void refresh();
+    refresh().catch(() => undefined);
   }, [refresh]);
 
   const {
@@ -63,13 +80,13 @@ export function InventoryClient() {
     reset,
     formState: { errors, isSubmitting },
   } = useForm<InventoryFormValues>({
-    resolver: zodResolver(inventoryFormSchema),
     defaultValues: {
-      productId: "",
-      movementType: "purchase",
-      qty: 1,
       adjustmentDelta: undefined,
+      movementType: "purchase",
+      productId: "",
+      qty: 1,
     },
+    resolver: zodResolver(inventoryFormSchema),
   });
 
   const movementType = watch("movementType");
@@ -81,290 +98,234 @@ export function InventoryClient() {
     try {
       await applyStockMovement({
         product_id: values.productId,
-        type: values.movementType,
         quantity_delta: delta,
         ref_id: refId,
+        type: values.movementType,
       });
       reset({
-        productId: values.productId,
-        movementType: values.movementType,
-        qty: 1,
         adjustmentDelta: undefined,
+        movementType: values.movementType,
+        productId: values.productId,
+        qty: 1,
       });
       await refresh();
     } catch (e: unknown) {
-      setLoadError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      setLoadError(translateError(t, message));
     }
   });
 
   const columns = useMemo<ColumnDef<StockMovementListRow>[]>(
     () => [
-      { accessorKey: "created_at", header: "When", sortingFn: "alphanumeric" },
+      {
+        accessorKey: "created_at",
+        cell: ({ getValue }) => {
+          try {
+            return new Date(getValue() as string).toLocaleString(locale);
+          } catch {
+            return String(getValue());
+          }
+        },
+        header: t("inventory.col.date"),
+        sortingFn: "alphanumeric",
+      },
       {
         accessorKey: "product_name",
-        header: "Product",
         cell: ({ row }) =>
           row.original.product_name ?? row.original.product_id.slice(0, 8),
+        header: t("inventory.col.product"),
       },
-      { accessorKey: "type", header: "Type" },
-      { accessorKey: "quantity_delta", header: "Δ Qty" },
+      {
+        accessorKey: "type",
+        cell: ({ getValue }) => {
+          const type = getValue() as keyof typeof MOVEMENT_TYPE_KEYS;
+          return type in MOVEMENT_TYPE_KEYS
+            ? t(MOVEMENT_TYPE_KEYS[type])
+            : String(getValue());
+        },
+        header: t("inventory.col.type"),
+      },
+      { accessorKey: "quantity_delta", header: t("inventory.col.delta") },
       {
         accessorKey: "ref_id",
-        header: "Ref",
         cell: ({ getValue }) => (
           <span className="font-mono text-xs">{getValue() as string}</span>
         ),
+        header: t("purchases.reference"),
       },
     ],
-    [],
+    [locale, t]
   );
 
-  const table = useReactTable({
-    data: movements,
-    columns,
-    state: { sorting },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  });
-
   return (
-    <main className="mx-auto max-w-5xl p-6">
-      <h1 className="font-semibold text-2xl tracking-tight">Inventory</h1>
-      <p className="mt-1 text-neutral-600 text-sm dark:text-neutral-400">
-        Record stock movements; on-hand is updated in a SQLite transaction
-        (BEGIN … COMMIT).
-      </p>
+    <main className="mx-auto max-w-5xl px-6 pb-6">
+      <PageHeader>
+        <PageTitle href="/inventory">{t("inventory.title")}</PageTitle>
+      </PageHeader>
 
-      {!isTauri() ? (
-        <p className="mt-4 text-amber-800 text-sm dark:text-amber-200">
-          Run{" "}
-          <code className="rounded bg-neutral-100 px-1 dark:bg-neutral-900">
-            pnpm tauri dev
-          </code>{" "}
-          for the database.
-        </p>
-      ) : null}
+      {isMudirDesktop() ? null : (
+        <Alert className="mt-4">
+          <AlertDescription>{t("common.db.tauriOnly")}</AlertDescription>
+        </Alert>
+      )}
 
       {loadError ? (
-        <p className="mt-4 text-red-600 text-sm" role="alert">
-          {loadError}
-        </p>
+        <Alert className="mt-4" variant="destructive">
+          <AlertDescription>{loadError}</AlertDescription>
+        </Alert>
       ) : null}
 
-      <section
-        aria-labelledby={recordHeadingId}
-        className="mt-8 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800"
-      >
-        <h2 className="font-medium text-lg" id={recordHeadingId}>
-          Record movement
-        </h2>
-        <form className="mt-4 flex flex-col gap-4" onSubmit={onSubmit}>
-          <div className="flex flex-col gap-1">
-            <label
-              className="text-neutral-600 text-xs dark:text-neutral-400"
-              htmlFor={productFieldId}
-            >
-              Product
-            </label>
-            <select
-              id={productFieldId}
-              className="rounded-md border border-neutral-300 px-2 py-2 text-sm dark:border-neutral-600"
-              {...register("productId")}
-            >
-              <option value="">Select…</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} (on hand: {p.on_hand_qty})
-                </option>
-              ))}
-            </select>
-            {errors.productId ? (
-              <span className="text-red-600 text-xs">
-                {errors.productId.message}
-              </span>
-            ) : null}
-          </div>
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle id={recordHeadingId}>{t("inventory.record")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={onSubmit}>
+            <FieldGroup>
+              <Field>
+                <Label htmlFor={productFieldId}>{t("inventory.product")}</Label>
+                <Controller
+                  control={control}
+                  name="productId"
+                  render={({ field }) => (
+                    <ProductCombobox
+                      allowNone
+                      id={productFieldId}
+                      onValueChange={field.onChange}
+                      products={products}
+                      showStock
+                      value={field.value}
+                    />
+                  )}
+                />
+                {errors.productId ? (
+                  <span className="text-destructive text-xs">
+                    {translateError(t, errors.productId.message ?? "")}
+                  </span>
+                ) : null}
+              </Field>
 
-          <div className="flex flex-col gap-1">
-            <span className="text-neutral-600 text-xs dark:text-neutral-400">
-              Movement type
-            </span>
-            <Controller
-              control={control}
-              name="movementType"
-              render={({ field }) => (
-                <div className="flex flex-wrap gap-3 text-sm">
-                  {(
-                    [
-                      ["purchase", "Purchase (in)"],
-                      ["return", "Return (in)"],
-                      ["sale", "Sale (out)"],
-                      ["adjustment", "Adjustment (±)"],
-                    ] as const
-                  ).map(([value, label]) => (
-                    <label
-                      key={value}
-                      className="inline-flex cursor-pointer items-center gap-1.5"
+              <Field>
+                <Label>{t("inventory.movementType")}</Label>
+                <Controller
+                  control={control}
+                  name="movementType"
+                  render={({ field }) => (
+                    <RadioGroup
+                      className="flex flex-wrap gap-x-4 gap-y-2"
+                      onValueChange={field.onChange}
+                      value={field.value}
                     >
-                      <input
-                        type="radio"
-                        value={value}
-                        checked={field.value === value}
-                        onChange={() => {
-                          field.onChange(value);
-                        }}
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
-              )}
-            />
-          </div>
+                      {(
+                        [
+                          ["purchase", "inventory.type.purchase"],
+                          ["return", "inventory.type.return"],
+                          ["sale", "inventory.type.sale"],
+                          ["adjustment", "inventory.type.adjustment"],
+                        ] as const
+                      ).map(([value, labelKey]) => {
+                        const optionId = `${uid}-movement-${value}`;
+                        return (
+                          <div
+                            className="flex items-center gap-1.5 text-sm"
+                            key={value}
+                          >
+                            <RadioGroupItem id={optionId} value={value} />
+                            <Label className="font-normal" htmlFor={optionId}>
+                              {t(labelKey)}
+                            </Label>
+                          </div>
+                        );
+                      })}
+                    </RadioGroup>
+                  )}
+                />
+              </Field>
 
-          {movementType === "adjustment" ? (
-            <div className="flex flex-col gap-1">
-              <label
-                className="text-neutral-600 text-xs dark:text-neutral-400"
-                htmlFor={adjFieldId}
-              >
-                Adjustment (negative removes stock)
-              </label>
-              <input
-                id={adjFieldId}
-                type="number"
-                step={1}
-                className="max-w-xs rounded-md border border-neutral-300 px-2 py-2 text-sm dark:border-neutral-600"
-                {...register("adjustmentDelta", { valueAsNumber: true })}
-              />
-              {errors.adjustmentDelta ? (
-                <span className="text-red-600 text-xs">
-                  {errors.adjustmentDelta.message}
-                </span>
-              ) : null}
-            </div>
-          ) : (
-            <div className="flex flex-col gap-1">
-              <label
-                className="text-neutral-600 text-xs dark:text-neutral-400"
-                htmlFor={qtyFieldId}
-              >
-                Quantity
-              </label>
-              <input
-                id={qtyFieldId}
-                type="number"
-                min={1}
-                step={1}
-                className="max-w-xs rounded-md border border-neutral-300 px-2 py-2 text-sm dark:border-neutral-600"
-                {...register("qty", { valueAsNumber: true })}
-              />
-              {errors.qty ? (
-                <span className="text-red-600 text-xs">
-                  {errors.qty.message}
-                </span>
-              ) : null}
-            </div>
-          )}
-
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={isSubmitting || products.length === 0}
-              className="rounded-md bg-neutral-900 px-3 py-2 text-sm text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
-            >
-              {isSubmitting ? "Saving…" : "Apply movement"}
-            </button>
-            <button
-              type="button"
-              className="rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-600"
-              onClick={() => {
-                void refresh();
-              }}
-            >
-              Refresh
-            </button>
-          </div>
-        </form>
-      </section>
-
-      <section className="mt-10" aria-labelledby={historyHeadingId}>
-        <h2 className="font-medium text-lg" id={historyHeadingId}>
-          Recent movements
-        </h2>
-        <div className="mt-4 overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
-          <table className="w-full min-w-[640px] border-collapse text-left text-sm">
-            <thead className="border-neutral-200 border-b bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-950">
-              {table.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <th key={header.id} className="px-3 py-2 font-medium">
-                      {header.isPlaceholder ? null : header.column.getCanSort() ? (
-                        <button
-                          type="button"
-                          className="inline-flex cursor-pointer select-none items-center gap-1"
-                          onClick={header.column.getToggleSortingHandler()}
-                        >
-                          {flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )}
-                          {header.column.getIsSorted() === "asc" ? " ▲" : null}
-                          {header.column.getIsSorted() === "desc" ? " ▼" : null}
-                        </button>
-                      ) : (
-                        flexRender(
-                          header.column.columnDef.header,
-                          header.getContext(),
-                        )
-                      )}
-                    </th>
-                  ))}
-                </tr>
-              ))}
-            </thead>
-            <tbody>
-              {table.getRowModel().rows.length === 0 ? (
-                <tr>
-                  <td
-                    className="px-3 py-8 text-center text-neutral-500"
-                    colSpan={columns.length}
-                  >
-                    No movements yet.
-                  </td>
-                </tr>
+              {movementType === "adjustment" ? (
+                <Field>
+                  <Label htmlFor={adjFieldId}>
+                    {t("inventory.adjustment")}
+                  </Label>
+                  <Input
+                    className="max-w-xs"
+                    id={adjFieldId}
+                    step={1}
+                    type="number"
+                    {...register("adjustmentDelta", {
+                      setValueAs: (value) => parseNumberInput(String(value)),
+                    })}
+                  />
+                  {errors.adjustmentDelta ? (
+                    <span className="text-destructive text-xs">
+                      {translateError(t, errors.adjustmentDelta.message ?? "")}
+                    </span>
+                  ) : null}
+                </Field>
               ) : (
-                table.getRowModel().rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="border-neutral-100 border-b dark:border-neutral-900"
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-3 py-2">
-                        {cell.column.id === "created_at"
-                          ? (() => {
-                              try {
-                                return new Date(
-                                  cell.getValue() as string,
-                                ).toLocaleString();
-                              } catch {
-                                return String(cell.getValue());
-                              }
-                            })()
-                          : flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext(),
-                            )}
-                      </td>
-                    ))}
-                  </tr>
-                ))
+                <Field>
+                  <Label htmlFor={qtyFieldId}>{t("inventory.qty")}</Label>
+                  <Input
+                    className="max-w-xs"
+                    id={qtyFieldId}
+                    min={1}
+                    step={1}
+                    type="number"
+                    {...register("qty", {
+                      setValueAs: (value) => parseNumberInput(String(value), 0),
+                    })}
+                  />
+                  {errors.qty ? (
+                    <span className="text-destructive text-xs">
+                      {translateError(t, errors.qty.message ?? "")}
+                    </span>
+                  ) : null}
+                </Field>
               )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+
+              <div className="flex gap-2">
+                <Button
+                  disabled={isSubmitting || products.length === 0}
+                  type="submit"
+                >
+                  {isSubmitting ? t("common.loading") : t("inventory.apply")}
+                </Button>
+                <Button
+                  data-icon="inline-start"
+                  onClick={() => {
+                    refresh().catch(() => undefined);
+                  }}
+                  type="button"
+                  variant="outline"
+                >
+                  <RefreshCw aria-hidden />
+                  {t("common.refresh")}
+                </Button>
+              </div>
+            </FieldGroup>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-10">
+        <CardHeader>
+          <CardTitle id={historyHeadingId}>{t("inventory.history")}</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <DataTable
+            columns={columns}
+            data={movements}
+            getSearchText={(movement) =>
+              [
+                movement.product_name ?? movement.product_id,
+                movement.type,
+                movement.ref_id,
+              ].join(" ")
+            }
+            tableClassName="min-w-[640px]"
+          />
+        </CardContent>
+      </Card>
     </main>
   );
 }

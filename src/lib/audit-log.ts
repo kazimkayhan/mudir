@@ -4,20 +4,20 @@ import { loadAppDatabase } from "@/lib/app-db";
 /** تا وقتی کاربر واقعی نداریم؛ POS از `cashierId` واقعی استفاده می‌کند. */
 export const DEFAULT_AUDIT_ACTOR_ID = "dev-operator";
 
-export type AuditAppendInput = {
-  actorUserId: string;
+export interface AuditAppendInput {
   action: string;
+  actorUserId: string;
   entity: string;
   entityId: string;
   payload?: string;
-};
+}
 
 type SqlDb = Awaited<ReturnType<typeof loadAppDatabase>>;
 
 /** درج در همان اتصال تراکنش (ترجیح برای عملیات اتمیک). */
 export async function appendAuditLog(
   db: SqlDb,
-  input: AuditAppendInput,
+  input: AuditAppendInput
 ): Promise<void> {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -32,7 +32,7 @@ export async function appendAuditLog(
       input.entityId,
       input.payload ?? null,
       now,
-    ],
+    ]
   );
 }
 

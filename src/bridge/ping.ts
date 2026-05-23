@@ -2,8 +2,8 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { z } from "zod";
 
 const dataLayerPingSchema = z.object({
-  ok: z.boolean(),
   message: z.string(),
+  ok: z.boolean(),
 });
 
 export type DataLayerPing = z.infer<typeof dataLayerPingSchema>;

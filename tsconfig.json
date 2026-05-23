@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "typeRoots": ["./node_modules/@types"],
     "forceConsistentCasingInFileNames": true,
     "target": "ES2021",
     "lib": ["dom", "dom.iterable", "esnext"],
@@ -34,5 +35,5 @@
     "dist/dev/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", ".next/cache"]
 }

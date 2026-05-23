@@ -20,12 +20,12 @@ export const saleItemSchema = z.object({
 });
 
 export const createSaleSchema = z.object({
-  cashierId: z.string().min(1),
+  cashierId: z.string().min(1).optional(),
   customerId: z.string().min(1).optional(),
   discountAmount: z.number().nonnegative(),
-  taxAmount: z.number().nonnegative(),
-  paidAmount: z.number().nonnegative(),
   items: z.array(saleItemSchema).min(1),
+  paidAmount: z.number().nonnegative(),
+  taxAmount: z.number().nonnegative(),
 });
 
 function newId(prefix: string): string {
@@ -41,21 +41,25 @@ function nowIso(): string {
  */
 export function createSaleAtomic(
   store: MutableSaleStore,
-  raw: CreateSaleInput,
+  raw: CreateSaleInput
 ): { ok: true; sale: SaleRecord } | { ok: false; error: string } {
   const parsed = createSaleSchema.safeParse(raw);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.message };
+    return { error: parsed.error.message, ok: false };
   }
   const input = parsed.data;
+  const cashierId = input.cashierId;
+  if (!cashierId) {
+    return { error: "validation.cashierRequired", ok: false };
+  }
 
   const subtotal = input.items.reduce(
     (sum, line) => sum + line.quantity * line.unitPrice,
-    0,
+    0
   );
   const total = Math.max(0, subtotal - input.discountAmount + input.taxAmount);
   if (input.paidAmount < total) {
-    return { ok: false, error: "paidAmount is less than total" };
+    return { error: "paidAmount is less than total", ok: false };
   }
 
   const backup = cloneMutableSaleStore(store);
@@ -63,16 +67,16 @@ export function createSaleAtomic(
   const saleId = newId("sale");
   const createdAt = nowIso();
   const sale: SaleRecord = {
-    id: saleId,
-    cashierId: input.cashierId,
-    customerId: input.customerId,
-    subtotal,
-    discountAmount: input.discountAmount,
-    taxAmount: input.taxAmount,
-    totalAmount: total,
-    paidAmount: input.paidAmount,
+    cashierId,
     changeAmount: input.paidAmount - total,
     createdAt,
+    customerId: input.customerId,
+    discountAmount: input.discountAmount,
+    id: saleId,
+    paidAmount: input.paidAmount,
+    subtotal,
+    taxAmount: input.taxAmount,
+    totalAmount: total,
   };
 
   const lines: SaleLineRecord[] = [];
@@ -81,47 +85,47 @@ export function createSaleAtomic(
     const product = store.products.get(line.productId);
     if (!product) {
       restoreMutableSaleStore(store, backup);
-      return { ok: false, error: `unknown product: ${line.productId}` };
+      return { error: `unknown product: ${line.productId}`, ok: false };
     }
     if (product.onHandQty < line.quantity) {
       restoreMutableSaleStore(store, backup);
       return {
-        ok: false,
         error: `insufficient stock for ${line.productId}: need ${line.quantity}, have ${product.onHandQty}`,
+        ok: false,
       };
     }
     product.onHandQty -= line.quantity;
     lines.push({
-      saleId,
       productId: line.productId,
       quantity: line.quantity,
+      saleId,
       unitPrice: line.unitPrice,
     });
     const movement: StockMovementRecord = {
+      createdAt,
       id: newId("mov"),
       productId: line.productId,
-      type: "sale",
       quantityDelta: -line.quantity,
       refId: saleId,
-      createdAt,
+      type: "sale",
     };
     store.stockMovements.push(movement);
   }
 
   const payment: PaymentRecord = {
-    id: newId("pay"),
-    saleId,
     amount: input.paidAmount,
     createdAt,
+    id: newId("pay"),
+    saleId,
   };
   const audit: AuditLogRecord = {
-    id: newId("aud"),
-    actorUserId: input.cashierId,
     action: "sale.created",
+    actorUserId: cashierId,
+    createdAt,
     entity: "sale",
     entityId: saleId,
-    payload: JSON.stringify({ total, lines: lines.length }),
-    createdAt,
+    id: newId("aud"),
+    payload: JSON.stringify({ lines: lines.length, total }),
   };
 
   store.sales.push(sale);

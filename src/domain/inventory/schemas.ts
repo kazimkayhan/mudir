@@ -1,47 +1,52 @@
 import { z } from "zod";
 
-export const stockMovementTypeSchema = z.enum([
+export const manualStockMovementTypeSchema = z.enum([
   "sale",
   "return",
   "adjustment",
   "purchase",
 ]);
 
+export const stockMovementTypeSchema = z.enum([
+  ...manualStockMovementTypeSchema.options,
+  "opening",
+]);
+
 /** ثبت یک حرکت انبار؛ `quantity_delta` مثبت = ورود، منفی = خروج. */
 export const applyMovementSchema = z.object({
-  product_id: z.string().min(1, "Product is required"),
-  type: stockMovementTypeSchema,
+  product_id: z.string().min(1, "validation.productRequired"),
   quantity_delta: z
     .number()
     .int()
-    .refine((n) => n !== 0, "Delta cannot be zero"),
-  ref_id: z.string().min(1, "Reference id is required"),
+    .refine((n) => n !== 0, "validation.deltaNonZero"),
+  ref_id: z.string().min(1, "validation.refRequired"),
+  type: manualStockMovementTypeSchema,
 });
 
 export type ApplyMovementInput = z.infer<typeof applyMovementSchema>;
 
 export const inventoryFormSchema = z
   .object({
-    productId: z.string().min(1, "Product is required"),
-    movementType: stockMovementTypeSchema,
-    /** برای purchase / sale / return: مقدار مثبت */
-    qty: z.number().int().positive().optional(),
     /** فقط برای adjustment: می‌تواند منفی باشد */
     adjustmentDelta: z.number().int().optional(),
+    movementType: manualStockMovementTypeSchema,
+    productId: z.string().min(1, "validation.productRequired"),
+    /** برای purchase / sale / return: مقدار مثبت */
+    qty: z.number().int().positive().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.movementType === "adjustment") {
       if (data.adjustmentDelta === undefined || data.adjustmentDelta === 0) {
         ctx.addIssue({
           code: "custom",
-          message: "Enter a non-zero adjustment",
+          message: "validation.adjustmentNonZero",
           path: ["adjustmentDelta"],
         });
       }
     } else if (data.qty === undefined || data.qty <= 0) {
       ctx.addIssue({
         code: "custom",
-        message: "Enter a positive quantity",
+        message: "validation.qtyPositive",
         path: ["qty"],
       });
     }
@@ -58,5 +63,7 @@ export function formValuesToDelta(values: InventoryFormValues): number {
       return -(values.qty ?? 0);
     case "adjustment":
       return values.adjustmentDelta ?? 0;
+    default:
+      return 0;
   }
 }

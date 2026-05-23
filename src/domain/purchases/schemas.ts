@@ -1,23 +1,24 @@
 import { z } from "zod";
 
 export const purchaseLineSchema = z.object({
-  productId: z.string().min(1, "Product is required"),
+  productId: z.string().min(1, "validation.productRequired"),
   quantity: z.number().int().positive(),
   unitCost: z.number().nonnegative(),
 });
 
 export const recordPurchaseSchema = z.object({
-  supplierId: z.string().min(1).optional(),
-  reference: z.string().optional(),
+  cashierId: z.string().min(1).optional(),
+  currency_code: z.enum(["AFN", "USD"]).optional(),
+  lines: z.array(purchaseLineSchema).min(1),
   notes: z.string().optional(),
-  cashierId: z.string().min(1, "Cashier is required"),
-  lines: z.array(purchaseLineSchema).min(1, "At least one line"),
+  reference: z.string().optional(),
+  supplierId: z.string().min(1).optional(),
 });
 
 export type RecordPurchaseInput = z.infer<typeof recordPurchaseSchema>;
 
 export function purchaseLinesTotalCost(
-  lines: { quantity: number; unitCost: number }[],
+  lines: { quantity: number; unitCost: number }[]
 ): number {
   return lines.reduce((s, l) => s + l.quantity * l.unitCost, 0);
 }

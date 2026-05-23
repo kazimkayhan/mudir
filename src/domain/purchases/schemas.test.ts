@@ -25,7 +25,7 @@ describe("purchaseLinesTotalCost", () => {
       purchaseLinesTotalCost([
         { quantity: 2, unitCost: 3 },
         { quantity: 1, unitCost: 10 },
-      ]),
+      ])
     ).toBe(16);
   });
 });

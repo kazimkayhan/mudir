@@ -1,124 +1,67 @@
-# Tauri 2.0 + Next.js 16 App Router Template
+# Mudir (مدیر)
 
->[!IMPORTANT]
-> Next.js is typically overkill for the frontend of a Tauri application.
-> I'd personally recommend checking out https://github.com/kvnxiao/tauri-tanstack-start-react-template first.
+Offline retail management for Afghan **فروشگاه** stores — in-store POS, online orders, inventory, purchases, expenses, and daily reports. Bilingual **Dari (fa-AF)** and **English**, with **AFN** and **USD** support.
 
-![Tauri window screenshot](public/tauri-nextjs-template-2_screenshot.png)
+## Features (v1.0)
 
-This is a [Tauri](https://v2.tauri.app/) project template using [Next.js](https://nextjs.org/),
-bootstrapped by combining [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app)
-and [`create tauri-app`](https://v2.tauri.app/start/create-project/).
+- **In-store sales** (`/pos`) — scan SKU/barcode, multi-currency, branded receipts
+- **Online orders** (`/orders`) — phone/WhatsApp/web orders, fulfill to sale
+- **Products & inventory** — pricing, low-stock alerts, atomic stock movements
+- **Customers** — optional customer on sales and orders
+- **Purchases & suppliers** — receive stock, track costs
+- **Expenses** — daily operating costs (no cash-session/shift UI in v1.0)
+- **Reports & dashboard** — channel split, P&L lite, top products, stock value
+- **Settings** — store profile, locale, exchange rate, safe backup/restore
+- **Offline-first** — SQLite on a single Windows PC via Tauri 2
 
-This template uses [`pnpm`](https://pnpm.io/) as the Node.js dependency
-manager, and uses the [App Router](https://nextjs.org/docs/app) model for Next.js.
+## Tech stack
 
-## Template Features
+- **UI:** Next.js 16 (static export) + React 19 + shadcn/ui + Tailwind CSS 4
+- **Desktop:** Tauri 2 + `tauri-plugin-sql` (Rust migrations are authoritative)
+- **Data:** UI → Bridge → Domain → SQLite
 
-- TypeScript frontend using [Next.js 16](https://nextjs.org/) React framework
-- [TailwindCSS 4](https://tailwindcss.com/) as a utility-first atomic CSS framework
-  - The example page in this template app has been updated to use only TailwindCSS
-  - While not included by default, consider using
-    [React Aria components](https://react-spectrum.adobe.com/react-aria/index.html)
-    and/or [HeadlessUI components](https://headlessui.com/) for completely unstyled and
-    fully accessible UI components, which integrate nicely with TailwindCSS
-- Opinionated formatting and linting already setup and enabled
-  - [Biome](https://biomejs.dev/) for a combination of fast formatting, linting, and
-    import sorting of TypeScript code
-  - [clippy](https://github.com/rust-lang/rust-clippy) and
-    [rustfmt](https://github.com/rust-lang/rustfmt) for Rust code
-- GitHub Actions to check code formatting and linting for both TypeScript and Rust
+See [`docs/brand-book.md`](docs/brand-book.md) and [`docs/database.md`](docs/database.md).
 
-## Getting Started
+## Prerequisites (Windows)
 
-### Prerequisites (desktop / Tauri)
+- Node.js + [pnpm](https://pnpm.io/)
+- [Tauri v2 prerequisites](https://v2.tauri.app/start/prerequisites/) — Rust (MSVC), Visual Studio C++ build tools, WebView2
 
-To run **`pnpm tauri dev`** or **`pnpm tauri build`**, install the [Tauri v2 prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS. On **Windows** you need **Rust (MSVC toolchain)**, **Visual Studio C++ build tools** (Desktop development with C++), and **WebView2**. Then restart your terminal so `cargo` is on your `PATH`.
-
-The Next.js UI alone (**`pnpm dev:next`**) only needs **Node.js** and **pnpm**.
-
-### Running development server and use Tauri window
-
-After cloning for the first time, change your app identifier inside
-`src-tauri/tauri.conf.json` to your own:
-
-```jsonc
-{
-  // ...
-  // The default "com.tauri.dev" will prevent you from building in release mode
-  "identifier": "com.my-application-name.app",
-  // ...
-}
-```
-
-To develop and run the frontend in a Tauri window:
+## Development
 
 ```shell
+pnpm install
 pnpm tauri dev
 ```
 
-This will load the Next.js frontend directly in a Tauri webview window, in addition to
-starting a development server on `localhost:3000`.
-Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd> in a Chromium based WebView (e.g. on
-Windows) to open the web developer console from the Tauri window.
-
-### Building for release
-
-To export the Next.js frontend via SSG and build the Tauri application for release:
+Next.js alone (browser preview, no SQLite):
 
 ```shell
-pnpm tauri build
+pnpm dev:next
 ```
 
-### Source structure
+## Scripts
 
-Next.js frontend source files are located in `src/` and Tauri Rust application source
-files are located in `src-tauri/`. Please consult the Next.js and Tauri documentation
-respectively for questions pertaining to either technology.
+| Command | Description |
+|---|---|
+| `pnpm tauri dev` | Run Mudir in a Tauri window |
+| `pnpm tauri build` | Build Windows installer (v1.0.0) |
+| `pnpm test` | Vitest (domain, format, bridge SQL checks) |
+| `pnpm lint` | Biome check |
+| `pnpm db:generate` | Refresh Drizzle artifacts from `schema.ts` |
 
-## Caveats
+**Do not** run `pnpm db:push` against production `mudir.db`. Rust migrations in `src-tauri/src/lib.rs` own the schema.
 
-### Static Site Generation / Pre-rendering
+## First run
 
-Next.js is a great React frontend framework which supports server-side rendering (SSR)
-as well as static site generation (SSG or pre-rendering). For the purposes of creating a
-Tauri frontend, only SSG can be used since SSR requires an active Node.js server.
+1. Complete the onboarding wizard (store name, locale, USD→AFN rate).
+2. Default owner PIN is seeded as `1234` — change in a future release.
+3. Add products, then sell from POS or create online orders.
 
-Please read into the Next.js documentation for [Static Exports](https://nextjs.org/docs/app/building-your-application/deploying/static-exports)
-for an explanation of supported / unsupported features and caveats.
+## Backup & restore
 
-### `next/image`
+Settings → Backup uses SQLite's online backup API. Restore validates schema version, saves a pre-restore copy (`mudir.pre-restore-*.db`), then replaces the active database. **Restart Mudir** after restore.
 
-The [`next/image` component](https://nextjs.org/docs/basic-features/image-optimization)
-is an enhancement over the regular `<img>` HTML element with server-side optimizations
-to dynamically scale the image quality. This is only supported when deploying the
-frontend onto Vercel directly, and must be disabled to properly export the frontend
-statically. As such, the
-[`unoptimized` property](https://nextjs.org/docs/api-reference/next/image#unoptimized)
-is set to true for the `next/image` component in the `next.config.js` configuration.
-This will allow the image to be served as-is, without changes to its quality, size,
-or format.
+## License
 
-### ReferenceError: window/navigator is not defined
-
-If you are using Tauri's `invoke` function or any OS related Tauri function from within
-JavaScript, you may encounter this error when importing the function in a global,
-non-browser context. This is due to the nature of Next.js' dev server effectively
-running a Node.js server for SSR and hot module replacement (HMR), and Node.js does not
-have a notion of `window` or `navigator`.
-
-The solution is to ensure that the Tauri functions are imported as late as possible
-from within a client-side React component, or via [lazy loading](https://nextjs.org/docs/app/building-your-application/optimizing/lazy-loading).
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and
-  API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-And to learn more about Tauri, take a look at the following resources:
-
-- [Tauri Documentation - Guides](https://v2.tauri.app/start/) - learn about the Tauri
-  toolkit.
+MIT

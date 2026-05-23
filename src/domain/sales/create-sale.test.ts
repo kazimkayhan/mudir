@@ -4,12 +4,12 @@ import type { MutableSaleStore } from "@/domain/types";
 
 function emptyStore(): MutableSaleStore {
   return {
-    products: new Map(),
-    sales: [],
-    saleItems: new Map(),
-    stockMovements: [],
-    payments: [],
     auditLogs: [],
+    payments: [],
+    products: new Map(),
+    saleItems: new Map(),
+    sales: [],
+    stockMovements: [],
   };
 }
 
@@ -21,9 +21,9 @@ describe("createSaleAtomic", () => {
     const result = createSaleAtomic(store, {
       cashierId: "u1",
       discountAmount: 0,
-      taxAmount: 0,
-      paidAmount: 100,
       items: [{ productId: "p1", quantity: 2, unitPrice: 50 }],
+      paidAmount: 100,
+      taxAmount: 0,
     });
 
     expect(result.ok).toBe(true);
@@ -43,22 +43,22 @@ describe("createSaleAtomic", () => {
     store.products.set("p1", { id: "p1", name: "Item", onHandQty: 1 });
 
     const before = {
-      salesLen: store.sales.length,
+      audLen: store.auditLogs.length,
       movLen: store.stockMovements.length,
       payLen: store.payments.length,
-      audLen: store.auditLogs.length,
       qty: store.products.get("p1")?.onHandQty,
+      salesLen: store.sales.length,
     };
 
     const result = createSaleAtomic(store, {
       cashierId: "u1",
-      paidAmount: 100,
       discountAmount: 0,
-      taxAmount: 0,
       items: [
         { productId: "p1", quantity: 1, unitPrice: 30 },
         { productId: "p1", quantity: 2, unitPrice: 35 },
       ],
+      paidAmount: 100,
+      taxAmount: 0,
     });
 
     expect(result.ok).toBe(false);
@@ -76,9 +76,9 @@ describe("createSaleAtomic", () => {
     const result = createSaleAtomic(store, {
       cashierId: "u1",
       discountAmount: 0,
-      taxAmount: 0,
-      paidAmount: 99,
       items: [{ productId: "p1", quantity: 2, unitPrice: 50 }],
+      paidAmount: 99,
+      taxAmount: 0,
     });
 
     expect(result.ok).toBe(false);

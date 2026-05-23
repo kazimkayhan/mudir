@@ -4,7 +4,7 @@ type AppDb = Awaited<ReturnType<typeof loadAppDatabase>>;
 
 /** یک اتصال؛ BEGIN IMMEDIATE … COMMIT / ROLLBACK برای عملیات اتمیک. */
 export async function runInTransaction(
-  steps: (db: AppDb) => Promise<void>,
+  steps: (db: AppDb) => Promise<void>
 ): Promise<void> {
   const db = await loadAppDatabase();
   await db.execute("BEGIN IMMEDIATE");
