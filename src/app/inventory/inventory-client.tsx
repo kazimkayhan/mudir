@@ -28,6 +28,7 @@ import {
   inventoryFormSchema,
 } from "@/domain/inventory/schemas";
 import { useI18n } from "@/i18n/hooks";
+import { toastSuccess, toastTranslatedError } from "@/lib/app-toast";
 import { parseNumberInput } from "@/lib/number-input";
 import { isMudirDesktop } from "@/lib/runtime";
 import { translateError } from "@/lib/translate-error";
@@ -109,8 +110,10 @@ export function InventoryClient() {
         qty: 1,
       });
       await refresh();
+      toastSuccess(t("inventory.toast.movementApplied"));
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
+      toastTranslatedError(t, e);
       setLoadError(translateError(t, message));
     }
   });

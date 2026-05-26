@@ -1,6 +1,10 @@
 export type Role = "owner" | "admin" | "manager" | "cashier";
 
 export interface SaleItemInput {
+  batchPicks?: {
+    batchId: string;
+    quantity: number;
+  }[];
   productId: string;
   quantity: number;
   unitPrice: number;

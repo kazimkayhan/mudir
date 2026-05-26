@@ -18,6 +18,8 @@ import {
 } from "@/bridge/sales";
 import { getBusinessSettings } from "@/bridge/settings";
 import { PageTitle } from "@/components/app-icons";
+import { BatchPickerDialog } from "@/components/inventory/batch-picker-dialog";
+import { useModuleTour } from "@/components/onboarding/use-module-tour";
 import { PageHeader } from "@/components/page-header";
 import { ProductCombobox } from "@/components/product-combobox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -52,6 +54,7 @@ import {
 } from "@/components/ui/table";
 import { computePosTotals } from "@/domain/sales/pos-totals";
 import { useI18n } from "@/i18n/hooks";
+import { toastSuccess, toastTranslatedError } from "@/lib/app-toast";
 import { type AppLocale, formatDate, formatMoney } from "@/lib/format";
 import { sumPaymentsInSaleCurrency } from "@/lib/payment-totals";
 import { isMudirDesktop } from "@/lib/runtime";
@@ -61,6 +64,8 @@ const PRINT_STYLE_ID = "mudir-pos-print-style";
 const RECEIPT_PRINT_CLASS = "mudir-pos-receipt-print";
 
 interface CartLine {
+  batchLabel?: string;
+  batchPicks?: { batchId: string; quantity: number }[];
   key: string;
   name: string;
   productId: string;
@@ -249,6 +254,11 @@ export function PosClient() {
   const [detailSaleId, setDetailSaleId] = useState<string | null>(null);
   const [saleDetail, setSaleDetail] =
     useState<Awaited<ReturnType<typeof getSaleDetail>>>(null);
+  const [batchPickTarget, setBatchPickTarget] = useState<{
+    price: number;
+    product: ProductRow;
+    qty: number;
+  } | null>(null);
 
   const receiptLabels = useMemo(
     () => ({
@@ -356,7 +366,13 @@ export function PosClient() {
     }
   }, [pickProductId, products]);
 
-  const addProductToCart = (p: ProductRow, qty: number, price: number) => {
+  const addProductToCart = (
+    p: ProductRow,
+    qty: number,
+    price: number,
+    batchPicks?: { batchId: string; quantity: number }[],
+    batchLabel?: string
+  ) => {
     if (p.on_hand_qty < qty) {
       setError(t("validation.insufficientStock"));
       return false;
@@ -364,6 +380,8 @@ export function PosClient() {
     setCart((c) => [
       ...c,
       {
+        batchLabel,
+        batchPicks,
         key: crypto.randomUUID(),
         name: p.name,
         productId: p.id,
@@ -372,6 +390,18 @@ export function PosClient() {
       },
     ]);
     return true;
+  };
+
+  const queueProductForCart = (p: ProductRow, qty: number, price: number) => {
+    if (p.tracking_mode === "serial") {
+      if (qty !== 1) {
+        setError(t("validation.serialQtyOne"));
+        return;
+      }
+      setBatchPickTarget({ price, product: p, qty });
+      return;
+    }
+    addProductToCart(p, qty, price);
   };
 
   const addLine = () => {
@@ -389,11 +419,10 @@ export function PosClient() {
       setError(t("validation.amountPositive"));
       return;
     }
-    if (addProductToCart(p, lineQty, linePrice)) {
-      setPickProductId("");
-      setLineQty(0);
-      setLinePrice(0);
-    }
+    queueProductForCart(p, lineQty, linePrice);
+    setPickProductId("");
+    setLineQty(0);
+    setLinePrice(0);
   };
 
   const scanAndAdd = async () => {
@@ -406,9 +435,8 @@ export function PosClient() {
       setError(t("validation.productRequired"));
       return;
     }
-    if (addProductToCart(p, 1, p.sale_price)) {
-      setScanCode("");
-    }
+    queueProductForCart(p, 1, p.sale_price);
+    setScanCode("");
   };
 
   const removeLine = (key: string) => {
@@ -454,6 +482,7 @@ export function PosClient() {
           ...(customerId ? { customerId } : {}),
           discountAmount: discount,
           items: cart.map((l) => ({
+            batchPicks: l.batchPicks,
             productId: l.productId,
             quantity: l.qty,
             unitPrice: l.unitPrice,
@@ -502,8 +531,10 @@ export function PosClient() {
         },
       ]);
       await refreshCatalog();
+      toastSuccess(t("pos.toast.saleComplete"));
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
+      toastTranslatedError(t, e);
       setError(translateError(t, message));
     } finally {
       setIsSubmitting(false);
@@ -568,8 +599,10 @@ export function PosClient() {
       });
       setReturnConfirmId(null);
       await refreshCatalog();
+      toastSuccess(t("pos.toast.returnComplete"));
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
+      toastTranslatedError(t, e);
       setReturnError(translateError(t, message));
     } finally {
       setReturnSubmitting(false);
@@ -577,6 +610,8 @@ export function PosClient() {
   };
 
   const displayStoreName = storeName || t("app.name");
+
+  useModuleTour();
 
   return (
     <main className="mx-auto max-w-6xl px-6 pb-6">
@@ -668,7 +703,7 @@ export function PosClient() {
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_320px]">
         <div className="space-y-6">
-          <Card>
+          <Card data-tour="pos-add-product">
             <CardHeader>
               <CardTitle>{t("pos.addProduct")}</CardTitle>
             </CardHeader>
@@ -700,7 +735,7 @@ export function PosClient() {
                 </div>
               </Field>
               <div className="flex flex-wrap items-end gap-3">
-                <Field className="min-w-[12rem]">
+                <Field className="min-w-48">
                   <Label htmlFor={productPickId}>{t("pos.pickProduct")}</Label>
                   <ProductCombobox
                     allowNone
@@ -765,7 +800,14 @@ export function PosClient() {
                     ) : (
                       cart.map((l) => (
                         <TableRow key={l.key}>
-                          <TableCell>{l.name}</TableCell>
+                          <TableCell>
+                            <div>{l.name}</div>
+                            {l.batchLabel ? (
+                              <div className="font-mono text-muted-foreground text-xs">
+                                {l.batchLabel}
+                              </div>
+                            ) : null}
+                          </TableCell>
                           <TableCell>
                             <NumberInput
                               className="w-16"
@@ -1004,6 +1046,7 @@ export function PosClient() {
               <Button
                 className="mt-4"
                 data-icon="inline-start"
+                data-tour="pos-complete"
                 disabled={
                   cart.length === 0 ||
                   isSubmitting ||
@@ -1176,6 +1219,29 @@ export function PosClient() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <BatchPickerDialog
+        onClose={() => setBatchPickTarget(null)}
+        onSelect={(batch) => {
+          if (!batchPickTarget) {
+            return;
+          }
+          const label =
+            batch.serial_number ?? batch.lot_number ?? batch.id.slice(0, 8);
+          addProductToCart(
+            batchPickTarget.product,
+            batchPickTarget.qty,
+            batchPickTarget.price,
+            [{ batchId: batch.id, quantity: batchPickTarget.qty }],
+            label
+          );
+          setBatchPickTarget(null);
+        }}
+        open={batchPickTarget !== null}
+        productId={batchPickTarget?.product.id ?? ""}
+        productName={batchPickTarget?.product.name ?? ""}
+        trackingMode={batchPickTarget?.product.tracking_mode ?? "serial"}
+      />
     </main>
   );
 }

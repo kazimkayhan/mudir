@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
@@ -43,11 +43,14 @@ describe("parsePowerLightStockReportLine", () => {
 
 describe("parsePowerLightStockReportText", () => {
   test("parses the attached stock PDF sample", async () => {
-    const { PDFParse } = await import("pdf-parse");
     const pdfPath = join(
       dirname(fileURLToPath(import.meta.url)),
       "../../../Stock-2026-05-21.pdf"
     );
+    if (!existsSync(pdfPath)) {
+      return;
+    }
+    const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: readFileSync(pdfPath) });
     const text = (await parser.getText()).text;
     await parser.destroy();

@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/chart";
 import type { ChannelTotals, PlLiteSummary } from "@/domain/reports/rollup";
 import { useI18n } from "@/i18n/hooks";
+import { toastSuccess } from "@/lib/app-toast";
 import { formatMoney } from "@/lib/format";
 
 const H = 260;
@@ -213,7 +214,10 @@ export function ReportsClient() {
         <Button
           data-icon="inline-start"
           disabled={sales.length === 0}
-          onClick={() => downloadSalesCsv(sales)}
+          onClick={() => {
+            downloadSalesCsv(sales);
+            toastSuccess(t("common.toast.exported"));
+          }}
           type="button"
         >
           <Download aria-hidden />
@@ -389,7 +393,6 @@ export function ReportsClient() {
           <DataTable
             columns={topProductColumns}
             data={topProducts}
-            emptyMessage={t("products.title")}
             getSearchText={(row) => row.name}
             showPagination={false}
           />

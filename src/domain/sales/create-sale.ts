@@ -14,6 +14,14 @@ import type {
 } from "@/domain/types";
 
 export const saleItemSchema = z.object({
+  batchPicks: z
+    .array(
+      z.object({
+        batchId: z.string().min(1),
+        quantity: z.number().int().positive(),
+      })
+    )
+    .optional(),
   productId: z.string().min(1),
   quantity: z.number().int().positive(),
   unitPrice: z.number().nonnegative(),

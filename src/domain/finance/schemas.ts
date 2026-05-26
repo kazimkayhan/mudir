@@ -10,6 +10,12 @@ export const expenseWriteSchema = z.object({
 export type ExpenseWriteInput = z.infer<typeof expenseWriteSchema>;
 
 export const supplierWriteSchema = z.object({
+  address: z.string().optional(),
+  bankDetails: z.string().optional(),
+  country: z.string().optional(),
+  currency: z.enum(["AFN", "USD"]).optional(),
+  email: z.string().optional(),
+  leadTimeDays: z.number().int().nonnegative().optional(),
   name: z.string().min(1, "validation.nameRequired"),
   phone: z.string().optional(),
 });

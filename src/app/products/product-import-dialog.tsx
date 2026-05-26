@@ -29,6 +29,7 @@ import {
   stockReportRowToProductInput,
 } from "@/domain/products/stock-report-import";
 import { useTranslations } from "@/i18n/hooks";
+import { toastSuccess, toastTranslatedError } from "@/lib/app-toast";
 import { extractTextFromStockReportPdf } from "@/lib/stock-report-pdf";
 import { translateError } from "@/lib/translate-error";
 
@@ -57,8 +58,6 @@ export function ProductImportDialog({
   );
   const [preview, setPreview] = useState<ParsedPreview | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [resultMessage, setResultMessage] = useState<string | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
 
@@ -77,8 +76,6 @@ export function ProductImportDialog({
     if (!open) {
       setPreview(null);
       setParseError(null);
-      setSubmitError(null);
-      setResultMessage(null);
       setIsParsing(false);
       setIsImporting(false);
     }
@@ -87,8 +84,6 @@ export function ProductImportDialog({
   async function handleFileChange(file: File | null) {
     setPreview(null);
     setParseError(null);
-    setResultMessage(null);
-    setSubmitError(null);
     if (!file) {
       return;
     }
@@ -138,8 +133,6 @@ export function ProductImportDialog({
     if (!preview) {
       return;
     }
-    setSubmitError(null);
-    setResultMessage(null);
     setIsImporting(true);
     try {
       const items = preview.rows.map((row) =>
@@ -149,7 +142,7 @@ export function ProductImportDialog({
         })
       );
       const result = await importProductsBatch(items);
-      setResultMessage(
+      toastSuccess(
         t("products.import.result", {
           imported: result.imported,
           skippedDuplicates: result.skippedDuplicates,
@@ -158,9 +151,9 @@ export function ProductImportDialog({
         })
       );
       onImported();
+      onClose();
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      setSubmitError(translateError(t, message));
+      toastTranslatedError(t, error);
     } finally {
       setIsImporting(false);
     }
@@ -266,18 +259,6 @@ export function ProductImportDialog({
           {parseError ? (
             <Alert variant="destructive">
               <AlertDescription>{parseError}</AlertDescription>
-            </Alert>
-          ) : null}
-
-          {submitError ? (
-            <Alert variant="destructive">
-              <AlertDescription>{submitError}</AlertDescription>
-            </Alert>
-          ) : null}
-
-          {resultMessage ? (
-            <Alert>
-              <AlertDescription>{resultMessage}</AlertDescription>
             </Alert>
           ) : null}
         </FieldGroup>

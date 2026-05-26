@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_SETTINGS } from "@/bridge/settings";
 import { parseNumberInput } from "@/lib/number-input";
 import {
   readStoredBusinessSettings,
@@ -20,9 +21,7 @@ describe("parseNumberInput", () => {
 describe("settings storage", () => {
   it("round-trips business settings", () => {
     const settings = {
-      baseCurrency: "AFN" as const,
-      defaultLocale: "fa-AF" as const,
-      id: "default",
+      ...DEFAULT_SETTINGS,
       onboardingCompleted: true,
       storeName: "Test",
       updatedAt: new Date().toISOString(),

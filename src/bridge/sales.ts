@@ -11,14 +11,17 @@ import type {
   SaleRecord,
 } from "@/domain/types";
 import { loadAppDatabase } from "@/lib/app-db";
+import { applySaleLineBatches } from "@/lib/apply-sale-line-batches";
 import { appendAuditLog } from "@/lib/audit-log";
 import { runInTransaction } from "@/lib/run-in-transaction";
+import { batchRowToInventoryBatch } from "@/lib/sale-batch-allocation";
 import { adjustProductStock } from "@/lib/stock";
 
 const productStockRowSchema = z.object({
   id: z.string(),
   name: z.string(),
   on_hand_qty: z.coerce.number().int(),
+  tracking_mode: z.string().default("none"),
 });
 
 const saleRowSchema = z.object({
@@ -102,13 +105,40 @@ export async function completePosSale(
   await runInTransaction(async (db) => {
     const placeholders = productIds.map((_, i) => `$${i + 1}`).join(", ");
     const rows = await db.select<unknown>(
-      `SELECT id, name, on_hand_qty FROM products WHERE id IN (${placeholders}) AND is_active = 1`,
+      `SELECT id, name, on_hand_qty, tracking_mode FROM products WHERE id IN (${placeholders}) AND is_active = 1`,
       productIds
     );
     const parsed = z.array(productStockRowSchema).parse(rows);
     if (parsed.length !== productIds.length) {
       throw new Error("validation.insufficientStock");
     }
+
+    const batchRaw = await db.select<unknown>(
+      `SELECT id, product_id, serial_number, lot_number, expiry_date, qty_on_hand, unit_cost, status, purchase_line_id, received_at
+       FROM inventory_batches WHERE product_id IN (${placeholders}) AND status = 'available' AND qty_on_hand > 0`,
+      productIds
+    );
+    const inventoryBatches = z
+      .array(
+        z.object({
+          expiry_date: z.string().nullable(),
+          id: z.string(),
+          lot_number: z.string().nullable(),
+          product_id: z.string(),
+          purchase_line_id: z.string().nullable(),
+          qty_on_hand: z.coerce.number(),
+          received_at: z.string(),
+          serial_number: z.string().nullable(),
+          status: z.string(),
+          unit_cost: z.coerce.number(),
+        })
+      )
+      .parse(batchRaw)
+      .map(batchRowToInventoryBatch);
+
+    const trackingByProduct = new Map(
+      parsed.map((row) => [row.id, row.tracking_mode])
+    );
 
     const products = new Map<string, ProductState>();
     for (const r of parsed) {
@@ -164,11 +194,22 @@ export async function completePosSale(
       ]
     );
 
-    for (const line of lines) {
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+      const inputLine = input.items[index];
       const lineId = crypto.randomUUID();
       await db.execute(
         "INSERT INTO sale_items (id, sale_id, product_id, quantity, unit_price) VALUES ($1, $2, $3, $4, $5)",
         [lineId, line.saleId, line.productId, line.quantity, line.unitPrice]
+      );
+
+      await applySaleLineBatches(
+        db,
+        inventoryBatches,
+        trackingByProduct,
+        line,
+        inputLine,
+        lineId
       );
     }
 

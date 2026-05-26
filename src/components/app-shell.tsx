@@ -2,20 +2,18 @@
 
 import { Languages, LogOut, Search, Store } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { runDailyBackupIfNeeded } from "@/bridge/backup";
 import { getBusinessSettings } from "@/bridge/settings";
-import {
-  ensureDefaultOwner,
-  getStoredOperator,
-  type StoredOperator,
-  setStoredOperator,
-} from "@/bridge/users";
+import type { StoredOperator } from "@/bridge/users";
+import { getStoredOperator, setStoredOperator } from "@/bridge/users";
 import { NavIcon } from "@/components/app-icons";
 import { navItemsForRole } from "@/components/app-nav";
 import { CommandPalette } from "@/components/command-palette";
-import { OnboardingWizard } from "@/components/onboarding-wizard";
-import { OperatorLoginDialog } from "@/components/operator-login-dialog";
+import { LicenseExpiryBanner } from "@/components/license-expiry-banner";
+import { HelpMenu } from "@/components/onboarding/help-menu";
+import { useModuleTour } from "@/components/onboarding/use-module-tour";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -32,16 +30,22 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { setStoredSession } from "@/domain/auth/session";
 import { useI18n } from "@/i18n/hooks";
+
+const PUBLIC_PATHS = new Set(["/activate", "/welcome", "/login", "/setup"]);
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { t, locale, setLocale } = useI18n();
   const [cmdOpen, setCmdOpen] = useState(false);
   const [storeName, setStoreName] = useState("");
-  const [showOnboarding, setShowOnboarding] = useState(false);
   const [operator, setOperator] = useState<StoredOperator | null>(null);
-  const [showLogin, setShowLogin] = useState(false);
+
+  const isPublicPage = PUBLIC_PATHS.has(pathname);
+
+  useModuleTour("app-shell", !isPublicPage);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -51,27 +55,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-    };
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   useEffect(() => {
-    (async () => {
-      await ensureDefaultOwner();
-      const stored = getStoredOperator();
-      if (stored) {
-        setOperator(stored);
-      } else {
-        setShowLogin(true);
-      }
-      const settings = await getBusinessSettings();
-      setStoreName(settings.storeName);
-      if (!settings.onboardingCompleted) {
-        setShowOnboarding(true);
-      }
-    })().catch(() => undefined);
-  }, []);
+    if (isPublicPage) {
+      return;
+    }
+    const stored = getStoredOperator();
+    setOperator(stored);
+    getBusinessSettings()
+      .then((s) => {
+        const name = s.tradeName ?? s.storeName;
+        setStoreName(name);
+        if (name) {
+          runDailyBackupIfNeeded(name).catch(() => undefined);
+        }
+      })
+      .catch(() => undefined);
+  }, [isPublicPage]);
+
+  if (isPublicPage) {
+    return <>{children}</>;
+  }
 
   const navItems = operator ? navItemsForRole(operator.role) : [];
   const sidebarSide = locale === "en" ? "left" : "right";
@@ -98,9 +104,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <SidebarContent>
           <SidebarGroup>
             <SidebarGroupContent>
-              <SidebarMenu>
+              <SidebarMenu data-tour="sidebar-nav">
                 {navItems.map((item) => {
-                  const active = pathname === item.href;
+                  const active =
+                    pathname === item.href ||
+                    pathname.startsWith(`${item.href}/`);
                   return (
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton asChild isActive={active}>
@@ -125,22 +133,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2">
             <SidebarTrigger />
             <Separator className="h-4" orientation="vertical" />
-            <Search
-              aria-hidden
-              className="size-3.5 shrink-0 text-muted-foreground"
-            />
-            <span className="text-muted-foreground text-xs">
+            <button
+              className="flex items-center gap-2 text-muted-foreground text-xs hover:text-foreground"
+              data-tour="command-palette"
+              onClick={() => setCmdOpen(true)}
+              type="button"
+            >
+              <Search aria-hidden className="size-3.5 shrink-0" />
               {t("shell.commandPalette")}
-            </span>
+            </button>
           </div>
           <div className="flex items-center gap-2">
+            <HelpMenu />
             {operator ? (
               <Button
                 data-icon="inline-start"
                 onClick={() => {
+                  setStoredSession(null);
                   setStoredOperator(null);
                   setOperator(null);
-                  setShowLogin(true);
+                  router.replace("/login");
                 }}
                 size="sm"
                 type="button"
@@ -152,9 +164,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             ) : null}
             <Button
               data-icon="inline-start"
-              onClick={() => {
-                setLocale(locale === "fa-AF" ? "en" : "fa-AF");
-              }}
+              onClick={() => setLocale(locale === "fa-AF" ? "en" : "fa-AF")}
               size="sm"
               type="button"
               variant="outline"
@@ -165,25 +175,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <ThemeToggle />
           </div>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {operator ? children : null}
-        </div>
+        <LicenseExpiryBanner />
+        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
       </SidebarInset>
       <CommandPalette onOpenChange={setCmdOpen} open={cmdOpen} />
-      <OperatorLoginDialog
-        onLoggedIn={(op) => {
-          setOperator(op);
-          setShowLogin(false);
-        }}
-        open={showLogin}
-      />
-      <OnboardingWizard
-        onComplete={(name) => {
-          setStoreName(name);
-          setShowOnboarding(false);
-        }}
-        open={showOnboarding && Boolean(operator)}
-      />
     </SidebarProvider>
   );
 }

@@ -7,8 +7,10 @@ export type AppNavHref =
   | "/inventory"
   | "/pos"
   | "/orders"
+  | "/invoices"
   | "/purchases"
   | "/customers"
+  | "/suppliers"
   | "/finance"
   | "/reports"
   | "/settings";
@@ -22,11 +24,25 @@ export const appNav: {
   { href: "/products", labelKey: "nav.products" },
   { href: "/inventory", labelKey: "nav.inventory" },
   { href: "/pos", labelKey: "nav.pos" },
+  { href: "/invoices", labelKey: "nav.invoices" },
   { href: "/orders", labelKey: "nav.orders" },
-  { href: "/purchases", labelKey: "nav.purchases", roles: ["owner"] },
+  {
+    href: "/purchases",
+    labelKey: "nav.purchases",
+    roles: ["owner", "admin", "manager"],
+  },
+  {
+    href: "/suppliers",
+    labelKey: "nav.suppliers",
+    roles: ["owner", "admin", "manager"],
+  },
   { href: "/customers", labelKey: "nav.customers" },
   { href: "/finance", labelKey: "nav.finance", roles: ["owner"] },
-  { href: "/reports", labelKey: "nav.reports", roles: ["owner"] },
+  {
+    href: "/reports",
+    labelKey: "nav.reports",
+    roles: ["owner", "admin", "manager"],
+  },
   { href: "/settings", labelKey: "nav.settings", roles: ["owner"] },
 ];
 

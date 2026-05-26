@@ -12,7 +12,7 @@ import {
   type OrderSource,
   updateOrderStatus,
 } from "@/bridge/orders";
-import { listProducts } from "@/bridge/products";
+import { listProducts, type ProductRow } from "@/bridge/products";
 import { PageTitle } from "@/components/app-icons";
 import { DataTable } from "@/components/data-table";
 import { PageHeader } from "@/components/page-header";
@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/select";
 import type { TranslationKey } from "@/i18n";
 import { useI18n } from "@/i18n/hooks";
+import { toastSuccess, toastTranslatedError } from "@/lib/app-toast";
 import { formatDate, formatMoney } from "@/lib/format";
 
 function orderStatusLabel(
@@ -50,9 +51,7 @@ export function OrdersClient() {
   const [customers, setCustomers] = useState<{ id: string; name: string }[]>(
     []
   );
-  const [products, setProducts] = useState<
-    { id: string; name: string; sale_price: number }[]
-  >([]);
+  const [products, setProducts] = useState<ProductRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [customerId, setCustomerId] = useState("");
   const [source, setSource] = useState<OrderSource>("phone");
@@ -70,9 +69,7 @@ export function OrdersClient() {
       ]);
       setOrders(o);
       setCustomers(c.map((x) => ({ id: x.id, name: x.name })));
-      setProducts(
-        p.map((x) => ({ id: x.id, name: x.name, sale_price: x.sale_price }))
-      );
+      setProducts(p);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -101,8 +98,10 @@ export function OrdersClient() {
       });
       setCustomerId("");
       setProductId("");
+      toastSuccess(t("orders.toast.created"));
       await refresh();
     } catch (e: unknown) {
+      toastTranslatedError(t, e);
       setError(e instanceof Error ? e.message : String(e));
     }
   };
@@ -146,8 +145,11 @@ export function OrdersClient() {
               <Button
                 onClick={() =>
                   updateOrderStatus(row.original.id, "confirmed")
-                    .then(refresh)
-                    .catch(() => undefined)
+                    .then(() => {
+                      toastSuccess(t("orders.toast.updated"));
+                      return refresh();
+                    })
+                    .catch((e: unknown) => toastTranslatedError(t, e))
                 }
                 size="sm"
                 type="button"
@@ -163,8 +165,11 @@ export function OrdersClient() {
                   data-icon="inline-start"
                   onClick={() =>
                     fulfillOnlineOrder(row.original.id)
-                      .then(refresh)
-                      .catch(() => undefined)
+                      .then(() => {
+                        toastSuccess(t("orders.toast.updated"));
+                        return refresh();
+                      })
+                      .catch((e: unknown) => toastTranslatedError(t, e))
                   }
                   size="sm"
                   type="button"
@@ -175,8 +180,11 @@ export function OrdersClient() {
                 <Button
                   onClick={() =>
                     updateOrderStatus(row.original.id, "cancelled")
-                      .then(refresh)
-                      .catch(() => undefined)
+                      .then(() => {
+                        toastSuccess(t("orders.toast.updated"));
+                        return refresh();
+                      })
+                      .catch((e: unknown) => toastTranslatedError(t, e))
                   }
                   size="sm"
                   type="button"

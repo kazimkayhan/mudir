@@ -72,7 +72,7 @@ function parsePart2(part: string): {
   if (tokens.length >= 4) {
     return {
       code: tokens[0],
-      total: parseDecimal(tokens.at(-1)),
+      total: parseDecimal(tokens.at(-1) ?? "0"),
     };
   }
   return null;
@@ -174,10 +174,15 @@ export function stockReportRowToProductInput(
     cost_price: row.costPrice,
     currency: options.currency,
     low_stock_threshold: 0,
+    min_sale_qty: 1,
     name: row.name,
     opening_qty: row.quantity,
+    product_type: "consumable",
+    requires_license: false,
     sale_price: salePrice,
     sku: row.code,
+    tracking_mode: "none",
+    unit_of_measure: "piece",
   };
 }
 

@@ -42,10 +42,12 @@ export const navKeys: Record<string, TranslationKey> = {
   "/dashboard": "nav.dashboard",
   "/finance": "nav.finance",
   "/inventory": "nav.inventory",
+  "/invoices": "nav.invoices",
   "/orders": "nav.orders",
   "/pos": "nav.pos",
   "/products": "nav.products",
   "/purchases": "nav.purchases",
   "/reports": "nav.reports",
   "/settings": "nav.settings",
+  "/suppliers": "nav.suppliers",
 };

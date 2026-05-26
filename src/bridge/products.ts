@@ -15,23 +15,60 @@ import { adjustProductStock, productHasReferences } from "@/lib/stock";
 
 export const productRowSchema = z.object({
   barcode: z.string().nullable().optional(),
+  brand_id: z.string().nullable().optional(),
+  category_id: z.string().nullable().optional(),
   condition: z.enum(["new", "used"]).default("new"),
   cost_price: z.coerce.number().default(0),
+  country_of_origin: z.string().nullable().optional(),
   created_at: z.string(),
   currency: z.string().default("AFN"),
+  default_duty_rate: z.coerce.number().nullable().optional(),
+  description: z.string().nullable().optional(),
+  hs_code: z.string().nullable().optional(),
   id: z.string(),
   is_active: z.coerce.number().default(1),
   low_stock_threshold: z.coerce.number().default(0),
+  manufacturer_id: z.string().nullable().optional(),
+  min_sale_qty: z.coerce.number().default(1),
+  model_number: z.string().nullable().optional(),
   name: z.string(),
   on_hand_qty: z.coerce.number(),
+  product_type: z.string().default("consumable"),
+  requires_license: z.coerce.number().default(0),
   sale_price: z.coerce.number().default(0),
   sku: z.string().nullable(),
+  specs_json: z.string().nullable().optional(),
+  tracking_mode: z.string().default("none"),
+  unit_of_measure: z.string().default("piece"),
+  warranty_months: z.coerce.number().nullable().optional(),
 });
 
 export type ProductRow = z.infer<typeof productRowSchema>;
 
-const PRODUCT_SELECT =
-  "SELECT id, name, sku, barcode, on_hand_qty, sale_price, cost_price, currency, condition, low_stock_threshold, is_active, created_at FROM products";
+const PRODUCT_SELECT = `SELECT id, name, sku, barcode, on_hand_qty, sale_price, cost_price, currency, condition,
+  low_stock_threshold, is_active, created_at, product_type, category_id, brand_id, manufacturer_id, model_number,
+  country_of_origin, tracking_mode, unit_of_measure, warranty_months, hs_code, default_duty_rate, description,
+  specs_json, requires_license, min_sale_qty FROM products`;
+
+function catalogValues(input: ProductWriteInput) {
+  return [
+    input.product_type,
+    input.category_id ?? null,
+    input.brand_id ?? null,
+    input.manufacturer_id ?? null,
+    input.model_number ?? null,
+    input.country_of_origin ?? null,
+    input.tracking_mode,
+    input.unit_of_measure,
+    input.warranty_months ?? null,
+    input.hs_code ?? null,
+    input.default_duty_rate ?? null,
+    input.description ?? null,
+    input.specs_json ?? null,
+    input.requires_license ? 1 : 0,
+    input.min_sale_qty,
+  ];
+}
 
 export async function listProducts(activeOnly = true): Promise<ProductRow[]> {
   if (!isTauri()) {
@@ -94,8 +131,11 @@ export async function insertProduct(raw: unknown): Promise<{ id: string }> {
       }
     }
     await db.execute(
-      `INSERT INTO products (id, name, sku, barcode, on_hand_qty, sale_price, cost_price, currency, condition, low_stock_threshold, is_active, created_at)
-       VALUES ($1, $2, $3, $4, 0, $5, $6, $7, $8, $9, 1, $10)`,
+      `INSERT INTO products (id, name, sku, barcode, on_hand_qty, sale_price, cost_price, currency, condition,
+        low_stock_threshold, is_active, created_at, product_type, category_id, brand_id, manufacturer_id,
+        model_number, country_of_origin, tracking_mode, unit_of_measure, warranty_months, hs_code,
+        default_duty_rate, description, specs_json, requires_license, min_sale_qty)
+       VALUES ($1, $2, $3, $4, 0, $5, $6, $7, $8, $9, 1, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)`,
       [
         id,
         input.name,
@@ -107,6 +147,7 @@ export async function insertProduct(raw: unknown): Promise<{ id: string }> {
         input.condition,
         input.low_stock_threshold,
         now,
+        ...catalogValues(input),
       ]
     );
     if (openingQty > 0) {
@@ -151,7 +192,11 @@ export async function updateProduct(raw: unknown): Promise<void> {
 
   await runInTransaction(async (db) => {
     await db.execute(
-      "UPDATE products SET name = $1, sku = $2, barcode = $3, sale_price = $4, cost_price = $5, currency = $6, condition = $7, low_stock_threshold = $8 WHERE id = $9",
+      `UPDATE products SET name = $1, sku = $2, barcode = $3, sale_price = $4, cost_price = $5, currency = $6,
+        condition = $7, low_stock_threshold = $8, product_type = $9, category_id = $10, brand_id = $11,
+        manufacturer_id = $12, model_number = $13, country_of_origin = $14, tracking_mode = $15,
+        unit_of_measure = $16, warranty_months = $17, hs_code = $18, default_duty_rate = $19, description = $20,
+        specs_json = $21, requires_license = $22, min_sale_qty = $23 WHERE id = $24`,
       [
         input.name,
         sku,
@@ -161,6 +206,7 @@ export async function updateProduct(raw: unknown): Promise<void> {
         input.currency,
         input.condition,
         input.low_stock_threshold,
+        ...catalogValues(input),
         input.id,
       ]
     );

@@ -297,7 +297,7 @@ function SidebarTrigger({
       variant="ghost"
       {...props}
     >
-      <PanelLeftIcon className="rtl:rotate-180" />
+      <PanelLeftIcon />
       <span className="sr-only">{t("shell.toggleSidebar")}</span>
     </Button>
   );

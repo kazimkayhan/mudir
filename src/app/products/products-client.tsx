@@ -3,6 +3,7 @@
 import type { ColumnDef, SortingState } from "@tanstack/react-table";
 import { Pencil, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { exportProductsCsv } from "@/bridge/data-export";
 import {
   listProducts,
   type ProductRow,
@@ -10,6 +11,9 @@ import {
 } from "@/bridge/products";
 import { PageTitle } from "@/components/app-icons";
 import { DataTable } from "@/components/data-table";
+import { EmptyState } from "@/components/empty-state";
+import { useTourOptional } from "@/components/onboarding/tour-provider";
+import { useModuleTour } from "@/components/onboarding/use-module-tour";
 import { PageHeader } from "@/components/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import type { ProductCondition } from "@/domain/products/schemas";
 import { useI18n } from "@/i18n/hooks";
+import { toastSuccess, toastTranslatedError } from "@/lib/app-toast";
 import { formatDate, formatMoney } from "@/lib/format";
 import { alertAction, confirmAction } from "@/lib/native-dialog";
 import { isMudirDesktop } from "@/lib/runtime";
@@ -39,6 +44,8 @@ type ConditionFilter = "all" | ProductCondition;
 
 export function ProductsClient() {
   const { t, locale } = useI18n();
+  useModuleTour();
+  const tour = useTourOptional();
   const conditionFilterId = useId();
   const [data, setData] = useState<ProductRow[]>([]);
   const [conditionFilter, setConditionFilter] =
@@ -171,6 +178,7 @@ export function ProductsClient() {
                   }
                   try {
                     await softDeleteProductById(row.original.id);
+                    toastSuccess(t("common.toast.deleted"));
                     await refresh();
                   } catch (e: unknown) {
                     const message = e instanceof Error ? e.message : String(e);
@@ -209,6 +217,7 @@ export function ProductsClient() {
           <div className="flex flex-wrap gap-2">
             <Button
               data-icon="inline-start"
+              data-tour="products-import"
               onClick={() => {
                 setImportOpen(true);
               }}
@@ -220,6 +229,7 @@ export function ProductsClient() {
             </Button>
             <Button
               data-icon="inline-start"
+              data-tour="products-add"
               onClick={() => {
                 setEditorMode("create");
                 setEditRow(null);
@@ -229,6 +239,17 @@ export function ProductsClient() {
             >
               <Plus aria-hidden />
               {t("products.add")}
+            </Button>
+            <Button
+              onClick={() => {
+                exportProductsCsv()
+                  .then(() => toastSuccess(t("common.toast.exported")))
+                  .catch((e: unknown) => toastTranslatedError(t, e));
+              }}
+              type="button"
+              variant="outline"
+            >
+              {t("data.export.products")}
             </Button>
           </div>
         </div>
@@ -260,54 +281,72 @@ export function ProductsClient() {
         </Button>
       </div>
 
-      <Card className="mt-4">
-        <CardContent className="p-0">
-          <DataTable
-            columns={columns}
-            data={tableData}
-            emptyMessage={t("products.empty")}
-            getSearchText={(product) =>
-              [
-                product.name,
-                product.sku ?? "",
-                conditionLabel(product.condition),
-              ].join(" ")
-            }
-            initialSorting={DEFAULT_SORTING}
-            searchPlaceholder={t("products.search")}
-            toolbar={
-              <Field className="min-w-[10rem]">
-                <Label htmlFor={conditionFilterId}>
-                  {t("products.filter.condition")}
-                </Label>
-                <Select
-                  onValueChange={(value) => {
-                    setConditionFilter(
-                      value === "used" || value === "new" ? value : "all"
-                    );
-                  }}
-                  value={conditionFilter}
-                >
-                  <SelectTrigger className="w-[10rem]" id={conditionFilterId}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">
-                      {t("products.filter.all")}
-                    </SelectItem>
-                    <SelectItem value="new">
-                      {t("products.condition.new")}
-                    </SelectItem>
-                    <SelectItem value="used">
-                      {t("products.condition.used")}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-            }
-          />
-        </CardContent>
-      </Card>
+      {!loadError && data.length === 0 ? (
+        <EmptyState
+          action={{
+            label: t("products.add"),
+            onClick: () => {
+              setEditorMode("create");
+              setEditRow(null);
+              setEditorOpen(true);
+            },
+          }}
+          description={t("onboarding.products.emptyHint")}
+          secondary={{
+            label: t("onboarding.showTour"),
+            onClick: () => tour?.startTour("products"),
+          }}
+          title={t("products.empty")}
+        />
+      ) : (
+        <Card className="mt-4">
+          <CardContent className="p-0">
+            <DataTable
+              columns={columns}
+              data={tableData}
+              getSearchText={(product) =>
+                [
+                  product.name,
+                  product.sku ?? "",
+                  conditionLabel(product.condition),
+                ].join(" ")
+              }
+              initialSorting={DEFAULT_SORTING}
+              searchPlaceholder={t("products.search")}
+              toolbar={
+                <Field className="min-w-40">
+                  <Label htmlFor={conditionFilterId}>
+                    {t("products.filter.condition")}
+                  </Label>
+                  <Select
+                    onValueChange={(value) => {
+                      setConditionFilter(
+                        value === "used" || value === "new" ? value : "all"
+                      );
+                    }}
+                    value={conditionFilter}
+                  >
+                    <SelectTrigger className="w-40" id={conditionFilterId}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">
+                        {t("products.filter.all")}
+                      </SelectItem>
+                      <SelectItem value="new">
+                        {t("products.condition.new")}
+                      </SelectItem>
+                      <SelectItem value="used">
+                        {t("products.condition.used")}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              }
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <ProductImportDialog
         onClose={() => {

@@ -1,9 +1,12 @@
 "use client";
 
-import { invoke } from "@tauri-apps/api/core";
-import { ask, message, open, save } from "@tauri-apps/plugin-dialog";
-import { DatabaseBackup, RefreshCw, Save, Upload } from "lucide-react";
+import { RefreshCw, Save } from "lucide-react";
 import { useCallback, useEffect, useId, useState } from "react";
+import { SettingsBackupSection } from "@/app/settings/settings-backup-section";
+import { SettingsBrandingSection } from "@/app/settings/settings-branding-section";
+import { SettingsGoogleDriveSection } from "@/app/settings/settings-google-drive-section";
+import { SettingsSubscriptionSection } from "@/app/settings/settings-subscription";
+import { SettingsUsersSection } from "@/app/settings/settings-users";
 import { type AuditLogRow, listRecentAuditLogs } from "@/bridge/audit";
 import {
   type BusinessSettings,
@@ -34,11 +37,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useI18n } from "@/i18n/hooks";
+import { toastSuccess, toastTranslatedError } from "@/lib/app-toast";
 import { isMudirDesktop } from "@/lib/runtime";
 
 export function SettingsClient() {
   const { t, setLocale } = useI18n();
-  const backupSectionId = useId();
   const profileSectionId = useId();
   const auditSectionId = useId();
   const storeNameId = useId();
@@ -51,7 +54,6 @@ export function SettingsClient() {
   const [schemaVersion, setSchemaVersion] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
 
   const refreshAudit = useCallback(async () => {
     setError(null);
@@ -88,85 +90,29 @@ export function SettingsClient() {
     }
     setBusy(true);
     setError(null);
-    setSaved(false);
     try {
       await saveBusinessSettings({
         address: profile.address,
         baseCurrency: profile.baseCurrency,
+        businessRegistrationNumber: profile.businessRegistrationNumber,
+        city: profile.city,
         defaultLocale: profile.defaultLocale,
+        email: profile.email,
+        importLicenseNumber: profile.importLicenseNumber,
+        legalName: profile.legalName,
         phone: profile.phone,
+        province: profile.province,
         storeName: profile.storeName,
+        streetAddress: profile.streetAddress,
+        tradeName: profile.tradeName,
         usdToAfnRate: profile.usdToAfnRate,
+        website: profile.website,
       });
       setLocale(profile.defaultLocale);
-      setSaved(true);
+      toastSuccess(t("common.toast.saved"));
     } catch (e: unknown) {
+      toastTranslatedError(t, e);
       setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const runBackup = async () => {
-    if (!isMudirDesktop()) {
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      const destPath = await save({
-        defaultPath: "mudir-backup.db",
-        filters: [{ extensions: ["db"], name: "SQLite" }],
-        title: t("settings.backup"),
-      });
-      if (!destPath) {
-        return;
-      }
-      await invoke("backup_mudir_database", { destPath });
-      await message(t("common.success"), { title: "Mudir" });
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
-      await message(msg, { kind: "error", title: t("common.error") });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const runRestore = async () => {
-    if (!isMudirDesktop()) {
-      return;
-    }
-    const ok = await ask(t("settings.restoreConfirm"), {
-      kind: "warning",
-      title: t("settings.restore"),
-    });
-    if (!ok) {
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      const selected = await open({
-        filters: [{ extensions: ["db"], name: "SQLite" }],
-        multiple: false,
-        title: t("settings.restore"),
-      });
-      if (selected === null || Array.isArray(selected)) {
-        return;
-      }
-      await invoke("restore_mudir_database", { srcPath: selected });
-      const version = await getSchemaVersion();
-      setSchemaVersion(version);
-      await message(t("settings.restoreDone"), {
-        kind: "warning",
-        title: t("common.success"),
-      });
-      await refreshAudit();
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
-      await message(msg, { kind: "error", title: t("common.error") });
     } finally {
       setBusy(false);
     }
@@ -188,17 +134,73 @@ export function SettingsClient() {
         </Alert>
       ) : null}
 
-      {saved ? (
-        <Alert className="mt-4">
-          <AlertDescription>{t("common.success")}</AlertDescription>
-        </Alert>
-      ) : null}
-
       {isMudirDesktop() ? null : (
         <Alert className="mt-4">
           <AlertDescription>{t("settings.browserPreview")}</AlertDescription>
         </Alert>
       )}
+
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle>{t("settings.company")}</CardTitle>
+          <CardDescription>{t("settings.companyDesc")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {profile ? (
+            <>
+              <Field>
+                <Label>{t("setup.legalName")}</Label>
+                <Input
+                  onChange={(e) =>
+                    setProfile({ ...profile, legalName: e.target.value })
+                  }
+                  value={profile.legalName ?? ""}
+                />
+              </Field>
+              <Field>
+                <Label>{t("setup.tradeName")}</Label>
+                <Input
+                  onChange={(e) =>
+                    setProfile({ ...profile, tradeName: e.target.value })
+                  }
+                  value={profile.tradeName ?? ""}
+                />
+              </Field>
+              <Field>
+                <Label>{t("setup.importLicense")}</Label>
+                <Input
+                  onChange={(e) =>
+                    setProfile({
+                      ...profile,
+                      importLicenseNumber: e.target.value,
+                    })
+                  }
+                  value={profile.importLicenseNumber ?? ""}
+                />
+              </Field>
+              <Field>
+                <Label>{t("setup.companyEmail")}</Label>
+                <Input
+                  onChange={(e) =>
+                    setProfile({ ...profile, email: e.target.value })
+                  }
+                  type="email"
+                  value={profile.email ?? ""}
+                />
+              </Field>
+              <Field>
+                <Label>{t("setup.website")}</Label>
+                <Input
+                  onChange={(e) =>
+                    setProfile({ ...profile, website: e.target.value })
+                  }
+                  value={profile.website ?? ""}
+                />
+              </Field>
+            </>
+          ) : null}
+        </CardContent>
+      </Card>
 
       <Card className="mt-8">
         <CardHeader>
@@ -321,37 +323,45 @@ export function SettingsClient() {
         </CardContent>
       </Card>
 
+      <SettingsBrandingSection profile={profile} setProfile={setProfile} />
+
+      <SettingsBackupSection
+        busy={busy}
+        onError={(message) => setError(message || null)}
+        profile={profile}
+        setBusy={setBusy}
+      />
+
+      <SettingsGoogleDriveSection />
+
+      <Card className="mt-8" id="subscription">
+        <CardHeader>
+          <CardTitle>{t("settings.subscription")}</CardTitle>
+          <CardDescription>{t("settings.subscriptionDesc")}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SettingsSubscriptionSection />
+        </CardContent>
+      </Card>
+
       <Card className="mt-8">
         <CardHeader>
-          <CardTitle id={backupSectionId}>
-            {t("settings.backup")} / {t("settings.restore")}
-          </CardTitle>
-          <CardDescription>{t("settings.backupDesc")}</CardDescription>
+          <CardTitle>{t("settings.users")}</CardTitle>
+          <CardDescription>{t("settings.usersDesc")}</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Button
-            data-icon="inline-start"
-            disabled={busy || !isMudirDesktop()}
-            onClick={() => {
-              runBackup().catch(() => undefined);
-            }}
-            type="button"
-          >
-            <DatabaseBackup aria-hidden />
-            {t("settings.backup")}…
-          </Button>
-          <Button
-            data-icon="inline-start"
-            disabled={busy || !isMudirDesktop()}
-            onClick={() => {
-              runRestore().catch(() => undefined);
-            }}
-            type="button"
-            variant="destructive"
-          >
-            <Upload aria-hidden />
-            {t("settings.restore")}…
-          </Button>
+        <CardContent>
+          <SettingsUsersSection />
+        </CardContent>
+      </Card>
+
+      <Card className="mt-8" id="help">
+        <CardHeader>
+          <CardTitle>{t("onboarding.help.title")}</CardTitle>
+          <CardDescription>{t("onboarding.help.desc")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <p>{t("onboarding.help.tip1")}</p>
+          <p>{t("onboarding.help.tip2")}</p>
         </CardContent>
       </Card>
 

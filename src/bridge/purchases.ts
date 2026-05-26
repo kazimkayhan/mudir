@@ -8,10 +8,13 @@ import {
 } from "@/domain/purchases/schemas";
 import { loadAppDatabase } from "@/lib/app-db";
 import { appendAuditLog } from "@/lib/audit-log";
+import { createBatchesForPurchaseLine } from "@/lib/purchase-receive";
 import { runInTransaction } from "@/lib/run-in-transaction";
 import { adjustProductStock } from "@/lib/stock";
 
 const purchaseRowSchema = z.object({
+  amount_paid: z.coerce.number().optional().default(0),
+  balance_due: z.coerce.number().optional().default(0),
   cashier_id: z.string(),
   created_at: z.string(),
   currency_code: z.string(),
@@ -33,7 +36,7 @@ export async function listPurchases(limit = 100): Promise<PurchaseRow[]> {
   }
   const db = await loadAppDatabase();
   const raw = await db.select<unknown>(
-    `SELECT p.id, p.supplier_id, s.name AS supplier_name, p.reference, p.total_cost, p.notes, p.cashier_id, p.operator_id, p.currency_code, p.exchange_rate, p.created_at
+    `SELECT p.id, p.supplier_id, s.name AS supplier_name, p.reference, p.total_cost, p.amount_paid, p.balance_due, p.notes, p.cashier_id, p.operator_id, p.currency_code, p.exchange_rate, p.created_at
      FROM purchases p LEFT JOIN suppliers s ON s.id = p.supplier_id
      ORDER BY p.created_at DESC LIMIT $1`,
     [limit]
@@ -56,7 +59,7 @@ export async function getPurchaseDetail(purchaseId: string): Promise<{
   }
   const db = await loadAppDatabase();
   const pRaw = await db.select<unknown>(
-    `SELECT p.id, p.supplier_id, s.name AS supplier_name, p.reference, p.total_cost, p.notes, p.cashier_id, p.operator_id, p.currency_code, p.exchange_rate, p.created_at
+    `SELECT p.id, p.supplier_id, s.name AS supplier_name, p.reference, p.total_cost, p.amount_paid, p.balance_due, p.notes, p.cashier_id, p.operator_id, p.currency_code, p.exchange_rate, p.created_at
      FROM purchases p LEFT JOIN suppliers s ON s.id = p.supplier_id WHERE p.id = $1`,
     [purchaseId]
   );
@@ -109,23 +112,26 @@ export async function recordPurchase(raw: unknown): Promise<{ id: string }> {
     }
 
     const placeholders = productIds.map((_, i) => `$${i + 1}`).join(", ");
-    const prodCheck = await db.select<unknown>(
-      `SELECT id FROM products WHERE id IN (${placeholders}) AND is_active = 1`,
+    const prodRows = await db.select<unknown>(
+      `SELECT id, tracking_mode FROM products WHERE id IN (${placeholders}) AND is_active = 1`,
       productIds
     );
-    if (
-      z.array(z.object({ id: z.string() })).parse(prodCheck).length !==
-      productIds.length
-    ) {
+    const products = z
+      .array(z.object({ id: z.string(), tracking_mode: z.string() }))
+      .parse(prodRows);
+    if (products.length !== productIds.length) {
       throw new Error("Product not found");
     }
+    const trackingByProduct = new Map(
+      products.map((p) => [p.id, p.tracking_mode])
+    );
 
     purchaseId = crypto.randomUUID();
     const now = new Date().toISOString();
 
     await db.execute(
-      `INSERT INTO purchases (id, supplier_id, reference, total_cost, notes, cashier_id, operator_id, currency_code, exchange_rate, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      `INSERT INTO purchases (id, supplier_id, reference, total_cost, notes, cashier_id, operator_id, currency_code, exchange_rate, amount_paid, balance_due, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, $4, 'received', $10)`,
       [
         purchaseId,
         input.supplierId ?? null,
@@ -146,6 +152,8 @@ export async function recordPurchase(raw: unknown): Promise<{ id: string }> {
         "INSERT INTO purchase_lines (id, purchase_id, product_id, quantity, unit_cost) VALUES ($1, $2, $3, $4, $5)",
         [lineId, purchaseId, line.productId, line.quantity, line.unitCost]
       );
+      const trackingMode = trackingByProduct.get(line.productId) ?? "none";
+      await createBatchesForPurchaseLine(db, line, lineId, now, trackingMode);
       const movId = crypto.randomUUID();
       await db.execute(
         `INSERT INTO stock_movements (id, product_id, type, quantity_delta, ref_id, operator_id, created_at) VALUES ($1, $2, 'purchase', $3, $4, $5, $6)`,
@@ -179,7 +187,7 @@ export async function listPurchasesForSupplier(
   }
   const db = await loadAppDatabase();
   const raw = await db.select<unknown>(
-    `SELECT p.id, p.supplier_id, s.name AS supplier_name, p.reference, p.total_cost, p.notes, p.cashier_id, p.operator_id, p.currency_code, p.exchange_rate, p.created_at
+    `SELECT p.id, p.supplier_id, s.name AS supplier_name, p.reference, p.total_cost, p.amount_paid, p.balance_due, p.notes, p.cashier_id, p.operator_id, p.currency_code, p.exchange_rate, p.created_at
      FROM purchases p LEFT JOIN suppliers s ON s.id = p.supplier_id WHERE p.supplier_id = $1 ORDER BY p.created_at DESC LIMIT $2`,
     [supplierId, limit]
   );

@@ -17,6 +17,12 @@ const saleRollupRowSchema = z.object({
   total_amount: z.coerce.number(),
 });
 
+const saleChannelRowSchema = z.object({
+  channel: z.string().optional(),
+  returned_at: z.string().nullable(),
+  total_amount: z.coerce.number(),
+});
+
 export interface SalesDayPoint {
   day: string;
   total: number;
@@ -83,7 +89,7 @@ export async function fetchChannelTotals(days = 30): Promise<ChannelTotals> {
     "SELECT channel, total_amount, returned_at FROM sales WHERE created_at >= $1",
     [since.toISOString()]
   );
-  const rows = z.array(saleRollupRowSchema).parse(raw);
+  const rows = z.array(saleChannelRowSchema).parse(raw);
   return rollupSalesByChannel(
     rows.map((r) => ({
       channel: r.channel ?? "in_store",

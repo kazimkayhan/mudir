@@ -135,4 +135,37 @@ body {
   [role="button"]:not(:disabled) {
     cursor: pointer;
   }
+
+  /* Mirror horizontal navigation icons in RTL (next/back, submenus, sidebar). */
+  [dir="rtl"]
+    :is(
+      .lucide-chevron-left,
+      .lucide-chevron-right,
+      .lucide-chevrons-left,
+      .lucide-chevrons-right,
+      .lucide-arrow-left,
+      .lucide-arrow-right,
+      .lucide-panel-left,
+      .lucide-panel-right
+    ):not(.icon-no-rtl-flip) {
+    scale: -1 1;
+  }
+
+  /* Hide WebView2/Edge/Chrome native password reveal when we provide our own. */
+  [data-slot="input-group"] input[type="password"]::-ms-reveal,
+  [data-slot="input-group"] input[type="password"]::-ms-clear {
+    display: none;
+  }
+
+  [data-slot="input-group"]
+    input[type="password"]::-webkit-credentials-auto-fill-button {
+    display: none;
+  }
+
+  [data-slot="input-group"]
+    input[type="password"]::-webkit-password-reveal-button {
+    display: none;
+    -webkit-appearance: none;
+    appearance: none;
+  }
 }

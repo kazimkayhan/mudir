@@ -20,6 +20,11 @@ import {
 } from "@/bridge/suppliers";
 import { PageTitle } from "@/components/app-icons";
 import { DataTable } from "@/components/data-table";
+import {
+  BatchReceiveFields,
+  type ReceiveLineMeta,
+} from "@/components/inventory/batch-receive-fields";
+import { useModuleTour } from "@/components/onboarding/use-module-tour";
 import { PageHeader } from "@/components/page-header";
 import { ProductCombobox } from "@/components/product-combobox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -52,6 +57,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useI18n } from "@/i18n/hooks";
+import { toastSuccess, toastTranslatedError } from "@/lib/app-toast";
 import { formatDate, formatMoney } from "@/lib/format";
 import { confirmAction } from "@/lib/native-dialog";
 import { isMudirDesktop } from "@/lib/runtime";
@@ -82,6 +88,9 @@ export function PurchasesClient() {
   const [reference, setReference] = useState("");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<DraftLine[]>([]);
+  const [receiveMeta, setReceiveMeta] = useState<
+    Record<string, ReceiveLineMeta>
+  >({});
   const [pickProduct, setPickProduct] = useState("");
   const [lineQty, setLineQty] = useState(0);
   const [lineCost, setLineCost] = useState(0);
@@ -137,21 +146,36 @@ export function PurchasesClient() {
       setError(t("validation.amountPositive"));
       return;
     }
+    const key = crypto.randomUUID();
     setLines((prev) => [
       ...prev,
       {
-        key: crypto.randomUUID(),
+        key,
         productId: pickProduct,
         qty: lineQty,
         unitCost: lineCost,
       },
     ]);
+    setReceiveMeta((prev) => ({
+      ...prev,
+      [key]: {
+        serialSlots: Array.from({ length: lineQty }, () => ({
+          id: crypto.randomUUID(),
+          value: "",
+        })),
+      },
+    }));
     setLineQty(0);
     setLineCost(0);
   };
 
   const removeLine = (key: string) => {
     setLines((prev) => prev.filter((l) => l.key !== key));
+    setReceiveMeta((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   };
 
   const addSupplier = async () => {
@@ -164,9 +188,11 @@ export function PurchasesClient() {
       });
       setNewSupName("");
       setNewSupPhone("");
+      toastSuccess(t("purchases.toast.supplierSaved"));
       await refresh();
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
+      toastTranslatedError(t, e);
       setError(translateError(t, message));
     } finally {
       setBusy(false);
@@ -194,9 +220,11 @@ export function PurchasesClient() {
       });
       setSupplierDialogOpen(false);
       setEditSupplier(null);
+      toastSuccess(t("purchases.toast.supplierSaved"));
       await refresh();
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
+      toastTranslatedError(t, e);
       setError(translateError(t, message));
     } finally {
       setBusy(false);
@@ -218,9 +246,11 @@ export function PurchasesClient() {
       if (supplierId === s.id) {
         setSupplierId("");
       }
+      toastSuccess(t("purchases.toast.supplierDeleted"));
       await refresh();
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
+      toastTranslatedError(t, e);
       setError(translateError(t, message));
     } finally {
       setBusy(false);
@@ -283,11 +313,21 @@ export function PurchasesClient() {
     setBusy(true);
     try {
       await recordPurchase({
-        lines: lines.map((l) => ({
-          productId: l.productId,
-          quantity: l.qty,
-          unitCost: l.unitCost,
-        })),
+        lines: lines.map((l) => {
+          const product = products.find((p) => p.id === l.productId);
+          const meta = receiveMeta[l.key];
+          return {
+            expiryDate: meta?.expiryDate,
+            lotNumber: meta?.lotNumber,
+            productId: l.productId,
+            quantity: l.qty,
+            serialNumbers:
+              product?.tracking_mode === "serial"
+                ? meta?.serialSlots.map((slot) => slot.value)
+                : undefined,
+            unitCost: l.unitCost,
+          };
+        }),
         notes: notes.trim() || undefined,
         reference: reference.trim() || undefined,
         supplierId: supplierId || undefined,
@@ -295,14 +335,18 @@ export function PurchasesClient() {
       setLines([]);
       setReference("");
       setNotes("");
+      toastSuccess(t("purchases.toast.recorded"));
       await refresh();
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
+      toastTranslatedError(t, e);
       setError(translateError(t, message));
     } finally {
       setBusy(false);
     }
   };
+
+  useModuleTour();
 
   return (
     <main className="mx-auto max-w-4xl px-6 pb-6">
@@ -328,7 +372,7 @@ export function PurchasesClient() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap items-end gap-3">
-            <Field className="min-w-[10rem]">
+            <Field className="min-w-40">
               <Label htmlFor={supNameId}>{t("validation.nameRequired")}</Label>
               <Input
                 dir="auto"
@@ -337,7 +381,7 @@ export function PurchasesClient() {
                 value={newSupName}
               />
             </Field>
-            <Field className="min-w-[8rem]">
+            <Field className="min-w-40">
               <Label htmlFor={supPhoneId}>{t("common.phone")}</Label>
               <Input
                 dir="auto"
@@ -376,7 +420,7 @@ export function PurchasesClient() {
         </CardContent>
       </Card>
 
-      <Card className="mt-8">
+      <Card className="mt-8" data-tour="purchases-new">
         <CardHeader>
           <CardTitle>{t("purchases.record")}</CardTitle>
         </CardHeader>
@@ -460,30 +504,44 @@ export function PurchasesClient() {
                 <p className="px-4 py-2 text-muted-foreground text-sm">—</p>
               ) : (
                 lines.map((l) => {
-                  const name =
-                    products.find((p) => p.id === l.productId)?.name ??
-                    l.productId;
+                  const product = products.find((p) => p.id === l.productId);
+                  const name = product?.name ?? l.productId;
+                  const meta = receiveMeta[l.key] ?? { serialSlots: [] };
                   return (
                     <Card className="mx-4 shadow-none" key={l.key}>
-                      <CardContent className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
-                        <Link
-                          className="text-primary underline-offset-4 hover:underline"
-                          href="/products"
-                        >
-                          {name}
-                        </Link>
-                        <span>
-                          {l.qty} × {formatMoney(l.unitCost, "AFN", locale)}
-                        </span>
-                        <Button
-                          className="h-auto px-0 text-destructive"
-                          onClick={() => removeLine(l.key)}
-                          size="sm"
-                          type="button"
-                          variant="link"
-                        >
-                          {t("common.delete")}
-                        </Button>
+                      <CardContent className="space-y-3 p-3 text-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <Link
+                            className="text-primary underline-offset-4 hover:underline"
+                            href="/products"
+                          >
+                            {name}
+                          </Link>
+                          <span>
+                            {l.qty} × {formatMoney(l.unitCost, "AFN", locale)}
+                          </span>
+                          <Button
+                            className="h-auto px-0 text-destructive"
+                            onClick={() => removeLine(l.key)}
+                            size="sm"
+                            type="button"
+                            variant="link"
+                          >
+                            {t("common.delete")}
+                          </Button>
+                        </div>
+                        {product ? (
+                          <BatchReceiveFields
+                            meta={meta}
+                            onChange={(next) =>
+                              setReceiveMeta((prev) => ({
+                                ...prev,
+                                [l.key]: next,
+                              }))
+                            }
+                            product={product}
+                          />
+                        ) : null}
                       </CardContent>
                     </Card>
                   );

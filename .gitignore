@@ -40,3 +40,6 @@ yarn-error.log*
 
 # local sqlite used by drizzle-kit push (dev)
 /.local/
+
+# license signing key (never commit)
+/.license/

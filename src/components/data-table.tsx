@@ -128,7 +128,7 @@ export function DataTable<T>({
   const filteredRowCount = table.getFilteredRowModel().rows.length;
   const paginationEnabled =
     showPagination && filteredRowCount > table.getState().pagination.pageSize;
-  const resolvedEmptyMessage = emptyMessage ?? t("common.empty");
+  const resolvedEmptyMessage = emptyMessage ?? t("common.table.noResults");
 
   return (
     <div className={cn("flex flex-col", className)}>

@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/select";
 import type { TranslationKey } from "@/i18n";
 import { useI18n } from "@/i18n/hooks";
+import { toastSuccess, toastTranslatedError } from "@/lib/app-toast";
 import { formatDate, formatMoney } from "@/lib/format";
 import { translateError } from "@/lib/translate-error";
 
@@ -98,9 +99,11 @@ export function FinanceClient() {
         note: expNote.trim() || undefined,
       });
       setExpNote("");
+      toastSuccess(t("common.toast.created"));
       await refresh();
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
+      toastTranslatedError(t, e);
       setError(translateError(t, message));
     } finally {
       setBusy(false);
@@ -121,9 +124,11 @@ export function FinanceClient() {
         note: editRow.note ?? undefined,
       });
       setEditRow(null);
+      toastSuccess(t("common.toast.updated"));
       await refresh();
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
+      toastTranslatedError(t, e);
       setError(translateError(t, message));
     }
   };
@@ -166,8 +171,11 @@ export function FinanceClient() {
             <Button
               onClick={() => {
                 deleteExpense(row.original.id)
-                  .then(refresh)
-                  .catch(() => undefined);
+                  .then(() => {
+                    toastSuccess(t("common.toast.deleted"));
+                    return refresh();
+                  })
+                  .catch((e: unknown) => toastTranslatedError(t, e));
               }}
               size="sm"
               type="button"

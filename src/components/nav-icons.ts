@@ -18,10 +18,12 @@ export const navIcons: Record<AppNavHref, LucideIcon> = {
   "/dashboard": LayoutDashboard,
   "/finance": Wallet,
   "/inventory": Warehouse,
+  "/invoices": ClipboardList,
   "/orders": ClipboardList,
   "/pos": ShoppingCart,
   "/products": Package,
   "/purchases": Truck,
   "/reports": BarChart3,
   "/settings": Settings,
+  "/suppliers": Truck,
 };

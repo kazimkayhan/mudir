@@ -1,8 +1,11 @@
 import { z } from "zod";
 
 export const purchaseLineSchema = z.object({
+  expiryDate: z.string().optional(),
+  lotNumber: z.string().optional(),
   productId: z.string().min(1, "validation.productRequired"),
   quantity: z.number().int().positive(),
+  serialNumbers: z.array(z.string()).optional(),
   unitCost: z.number().nonnegative(),
 });
 

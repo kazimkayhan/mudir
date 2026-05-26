@@ -1,4 +1,5 @@
-import { confirm, message } from "@tauri-apps/plugin-dialog";
+import { confirm } from "@tauri-apps/plugin-dialog";
+import { toastError, toastInfo, toastWarning } from "@/lib/app-toast";
 import { isMudirDesktop } from "@/lib/runtime";
 
 function webConfirm(body: string, title?: string): Promise<boolean> {
@@ -60,12 +61,15 @@ export function confirmAction(body: string, title?: string): Promise<boolean> {
 
 export function alertAction(
   body: string,
-  title?: string,
+  _title?: string,
   kind: "info" | "error" | "warning" = "info"
 ): Promise<void> {
-  if (isMudirDesktop()) {
-    return message(body, { kind, title }).then(() => undefined);
+  if (kind === "error") {
+    toastError(body);
+  } else if (kind === "warning") {
+    toastWarning(body);
+  } else {
+    toastInfo(body);
   }
-  console.warn(`[${title ?? kind}] ${body}`);
   return Promise.resolve();
 }

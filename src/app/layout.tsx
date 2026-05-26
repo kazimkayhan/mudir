@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import { Noto_Sans_Arabic } from "next/font/google";
 import { AppDirection } from "@/components/app-direction";
 import { AppShell } from "@/components/app-shell";
+import { AuthGate } from "@/components/auth-gate";
+import { TourProvider } from "@/components/onboarding/tour-provider";
+import { TourSpotlight } from "@/components/onboarding/tour-spotlight";
+import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { I18nProvider } from "@/i18n/provider";
 import "@/styles/globals.css";
@@ -38,7 +42,13 @@ export default function RootLayout({
         <I18nProvider>
           <AppDirection>
             <TooltipProvider>
-              <AppShell>{children}</AppShell>
+              <AuthGate>
+                <TourProvider>
+                  <AppShell>{children}</AppShell>
+                  <Toaster />
+                  <TourSpotlight />
+                </TourProvider>
+              </AuthGate>
             </TooltipProvider>
           </AppDirection>
         </I18nProvider>
