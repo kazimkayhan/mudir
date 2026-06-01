@@ -1,10 +1,11 @@
 "use client";
 
-import { Eye, EyeOff, Languages, Store } from "lucide-react";
+import { Eye, EyeOff, Languages } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useState } from "react";
 import { getBusinessSettings } from "@/bridge/settings";
 import { loginSession, verifyCredentials } from "@/bridge/users";
+import { AppLogo } from "@/components/app-logo";
 import { AssetPreview } from "@/components/asset-preview";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -227,9 +228,5 @@ function LoginLogo({ logoPath }: { logoPath?: string }) {
     );
   }
 
-  return (
-    <div className="flex size-24 items-center justify-center rounded-2xl border border-border/60 bg-primary/10 shadow-sm ring-1 ring-primary/15">
-      <Store aria-hidden className="size-10 text-primary" />
-    </div>
-  );
+  return <AppLogo size={96} />;
 }

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { pickAndCopyCompanyAsset } from "@/bridge/company-assets";
 import { saveBusinessSettings } from "@/bridge/settings";
 import { upsertOwnerAccount } from "@/bridge/users";
+import { AppLogo } from "@/components/app-logo";
 import { AssetPreview } from "@/components/asset-preview";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -179,6 +180,13 @@ export default function SetupPage() {
   return (
     <div className="flex min-h-svh flex-col bg-linear-to-br from-background via-background to-primary/5">
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 py-10">
+        <div className="mb-6 flex items-center gap-3">
+          <AppLogo size={40} />
+          <div>
+            <p className="font-semibold text-sm">{t("app.name")}</p>
+            <p className="text-muted-foreground text-xs">{t("app.tagline")}</p>
+          </div>
+        </div>
         <div className="mb-8">
           <div className="mb-2 h-2 overflow-hidden rounded-full bg-muted">
             <div

@@ -8,8 +8,9 @@ use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
-use tauri::Manager;
 use tauri_plugin_opener::OpenerExt;
+
+use crate::resolve_app_data_root;
 
 const REDIRECT_PORT: u16 = 8765;
 const REDIRECT_URI: &str = "http://127.0.0.1:8765/callback";
@@ -34,10 +35,7 @@ pub struct GoogleDriveStatus {
 }
 
 fn auth_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-  app
-    .path()
-    .resolve("google-drive-auth.json", tauri::path::BaseDirectory::AppData)
-    .map_err(|e| format!("resolve google drive auth: {e}"))
+  Ok(resolve_app_data_root(app)?.join("google-drive-auth.json"))
 }
 
 fn load_auth(app: &tauri::AppHandle) -> Option<GoogleDriveAuth> {

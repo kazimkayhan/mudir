@@ -4,7 +4,14 @@
  */
 export async function loadAppDatabase() {
   const { default: Database } = await import("@tauri-apps/plugin-sql");
-  return Database.load("sqlite:mudir.db");
+  const { invoke } = await import("@tauri-apps/api/core");
+
+  try {
+    const preferredUri = await invoke<string>("get_database_uri");
+    return await Database.load(preferredUri);
+  } catch {
+    return Database.load("sqlite:mudir.db");
+  }
 }
 
 type SqlDb = Awaited<ReturnType<typeof loadAppDatabase>>;

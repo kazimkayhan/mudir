@@ -1,8 +1,9 @@
 "use client";
 
-import { ChevronRight, Store } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AppLogo } from "@/components/app-logo";
 import { ThemePicker } from "@/components/theme-picker";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -50,7 +51,7 @@ export default function WelcomePage() {
     <div className="flex min-h-svh flex-col bg-linear-to-br from-background via-background to-primary/5">
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 py-10">
         <div className="mb-8 flex items-center gap-3">
-          <Store aria-hidden className="size-10 text-primary" />
+          <AppLogo priority size={48} />
           <div>
             <h1 className="font-semibold text-3xl">{t("welcome.title")}</h1>
             <p className="mt-1 text-muted-foreground">

@@ -1,9 +1,9 @@
 "use client";
 
-import { Store } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { activateLicense } from "@/bridge/license";
+import { AppLogo } from "@/components/app-logo";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup } from "@/components/ui/field";
@@ -47,7 +47,7 @@ export default function ActivatePage() {
     <div className="flex min-h-svh flex-col items-center justify-center bg-linear-to-br from-background via-background to-primary/5 px-6 py-10">
       <div className="w-full max-w-lg rounded-xl border bg-card p-8 shadow-sm">
         <div className="mb-6 flex items-center gap-3">
-          <Store aria-hidden className="size-8 text-primary" />
+          <AppLogo size={40} />
           <div>
             <h1 className="font-semibold text-2xl">
               {t("license.activateTitle")}

@@ -1,7 +1,8 @@
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use tauri::Manager;
+
+use crate::resolve_app_data_root;
 
 const PUBLIC_KEY_BYTES: [u8; 32] = [
   0x4e, 0xef, 0x01, 0x44, 0x61, 0x39, 0xd4, 0xce, 0x53, 0x2d, 0x52, 0xc4, 0x8f, 0xf1, 0x2e,
@@ -39,10 +40,7 @@ pub struct LicenseStatus {
 }
 
 fn license_file_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-  app
-    .path()
-    .resolve("license.json", tauri::path::BaseDirectory::AppData)
-    .map_err(|e| format!("resolve license path: {e}"))
+  Ok(resolve_app_data_root(app)?.join("license.json"))
 }
 
 fn dev_license_payload() -> LicensePayload {

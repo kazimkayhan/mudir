@@ -18,7 +18,11 @@ const fontSans = Noto_Sans_Arabic({
 });
 
 export const metadata: Metadata = {
-  description: "مدیریت فروشگاه، آسان و آفلاین",
+  description: "مدیریت آسان و آفلاین",
+  icons: {
+    apple: "/brand/logo.png",
+    icon: "/brand/logo.png",
+  },
   title: "مدیر — Mudir",
 };
 

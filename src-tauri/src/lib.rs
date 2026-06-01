@@ -33,10 +33,7 @@ fn copy_company_asset(
   source_path: String,
   file_name: String,
 ) -> Result<String, String> {
-  let company_dir = app
-    .path()
-    .resolve("company", tauri::path::BaseDirectory::AppData)
-    .map_err(|e| format!("resolve company dir: {e}"))?;
+  let company_dir = resolve_app_data_root(&app)?.join("company");
   std::fs::create_dir_all(&company_dir).map_err(|e| format!("create company dir: {e}"))?;
   let dest = company_dir.join(&file_name);
   std::fs::copy(&source_path, &dest).map_err(|e| format!("copy asset: {e}"))?;
@@ -75,13 +72,7 @@ fn copy_product_asset(
   source_path: String,
   file_name: String,
 ) -> Result<String, String> {
-  let product_dir = app
-    .path()
-    .resolve(
-      format!("products/{product_id}"),
-      tauri::path::BaseDirectory::AppData,
-    )
-    .map_err(|e| format!("resolve product dir: {e}"))?;
+  let product_dir = resolve_app_data_root(&app)?.join(format!("products/{product_id}"));
   std::fs::create_dir_all(&product_dir).map_err(|e| format!("create product dir: {e}"))?;
   let dest = product_dir.join(&file_name);
   std::fs::copy(&source_path, &dest).map_err(|e| format!("copy product asset: {e}"))?;
@@ -98,10 +89,115 @@ fn greet() -> String {
 }
 
 pub(crate) fn resolve_mudir_db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+  if let Some(drive_path) = preferred_windows_data_root().map(|root| root.join("mudir.db")) {
+    if let Some(parent) = drive_path.parent() {
+      if std::fs::create_dir_all(parent).is_ok() {
+        let _ = migrate_legacy_db_to_d_drive(app, &drive_path);
+        return Ok(drive_path);
+      }
+    }
+  }
+
   app
     .path()
     .resolve("mudir.db", tauri::path::BaseDirectory::AppConfig)
     .map_err(|e| format!("resolve mudir.db: {e}"))
+}
+
+pub(crate) fn resolve_app_data_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+  if let Some(path) = preferred_windows_data_root() {
+    std::fs::create_dir_all(&path).map_err(|e| format!("create app data dir: {e}"))?;
+    return Ok(path);
+  }
+
+  app
+    .path()
+    .resolve("mudir", tauri::path::BaseDirectory::AppData)
+    .map_err(|e| format!("resolve app data dir: {e}"))
+}
+
+fn preferred_windows_data_root() -> Option<PathBuf> {
+  if cfg!(target_os = "windows") {
+    return Some(PathBuf::from(r"D:\MudirData"));
+  }
+  None
+}
+
+fn ensure_preferred_windows_data_root() -> Result<(), String> {
+  if let Some(root) = preferred_windows_data_root() {
+    std::fs::create_dir_all(&root)
+      .map_err(|e| format!("create data dir {}: {e}", root.display()))?;
+  }
+  Ok(())
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StoragePaths {
+  data_root: String,
+  database_path: String,
+  database_uri: String,
+  backups_dir: String,
+  legacy_database_path: Option<String>,
+}
+
+#[tauri::command]
+fn get_database_uri(app: tauri::AppHandle) -> Result<String, String> {
+  Ok(get_storage_paths(app)?.database_uri)
+}
+
+#[tauri::command]
+fn get_storage_paths(app: tauri::AppHandle) -> Result<StoragePaths, String> {
+  let database_uri = if cfg!(target_os = "windows") {
+    let path = PathBuf::from(r"D:\MudirData\mudir.db");
+    if let Some(parent) = path.parent() {
+      std::fs::create_dir_all(parent).map_err(|e| format!("create D drive data dir: {e}"))?;
+    }
+    migrate_legacy_db_to_d_drive(&app, &path)?;
+    "sqlite:D:/MudirData/mudir.db".to_string()
+  } else {
+    "sqlite:mudir.db".to_string()
+  };
+
+  let data_root = resolve_app_data_root(&app)?;
+  let database_path = resolve_mudir_db_path(&app)?;
+  let backups_dir = data_root.join("backups");
+
+  let legacy_database_path = app
+    .path()
+    .resolve("mudir.db", tauri::path::BaseDirectory::AppConfig)
+    .ok()
+    .filter(|legacy| legacy.exists() && legacy != &database_path)
+    .map(|legacy| legacy.to_string_lossy().into_owned());
+
+  Ok(StoragePaths {
+    data_root: data_root.to_string_lossy().into_owned(),
+    database_path: database_path.to_string_lossy().into_owned(),
+    database_uri,
+    backups_dir: backups_dir.to_string_lossy().into_owned(),
+    legacy_database_path,
+  })
+}
+
+fn migrate_legacy_db_to_d_drive(app: &tauri::AppHandle, d_drive_db: &Path) -> Result<(), String> {
+  if d_drive_db.exists() {
+    return Ok(());
+  }
+
+  let legacy_db = app
+    .path()
+    .resolve("mudir.db", tauri::path::BaseDirectory::AppConfig)
+    .map_err(|e| format!("resolve legacy mudir.db: {e}"))?;
+
+  if !legacy_db.exists() {
+    return Ok(());
+  }
+
+  if let Some(parent) = d_drive_db.parent() {
+    std::fs::create_dir_all(parent).map_err(|e| format!("create D drive data dir: {e}"))?;
+  }
+
+  sqlite_backup_to(&legacy_db, &d_drive_db.to_path_buf())
 }
 
 pub(crate) const EXPECTED_SCHEMA_VERSION: i64 = 24;
@@ -229,6 +325,8 @@ fn open_backup_folder(app: tauri::AppHandle) -> Result<(), String> {
 /// در صورت شکست راه‌اندازی یا اجرای runtime برمی‌گردد.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() -> tauri::Result<()> {
+  ensure_preferred_windows_data_root().map_err(std::io::Error::other)?;
+
   let sql_migrations = vec![
     Migration {
       version: 1,
@@ -785,9 +883,25 @@ pub fn run() -> tauri::Result<()> {
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_dialog::init())
     .plugin(
-      tauri_plugin_sql::Builder::default()
-        .add_migrations("sqlite:mudir.db", sql_migrations)
-        .build(),
+      {
+        let sql_migrations_for_d = sql_migrations
+          .iter()
+          .map(|migration| Migration {
+            version: migration.version,
+            description: migration.description,
+            sql: migration.sql,
+            kind: match migration.kind {
+              MigrationKind::Up => MigrationKind::Up,
+              MigrationKind::Down => MigrationKind::Down,
+            },
+          })
+          .collect();
+
+        tauri_plugin_sql::Builder::default()
+          .add_migrations("sqlite:mudir.db", sql_migrations)
+          .add_migrations("sqlite:D:/MudirData/mudir.db", sql_migrations_for_d)
+          .build()
+      },
     )
     .invoke_handler(tauri::generate_handler![
       greet,
@@ -806,6 +920,8 @@ pub fn run() -> tauri::Result<()> {
       get_backup_status,
       set_auto_daily_backup,
       open_backup_folder,
+      get_database_uri,
+      get_storage_paths,
       google_drive::connect_google_drive,
       google_drive::disconnect_google_drive,
       google_drive::get_google_drive_status,

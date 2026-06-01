@@ -1,21 +1,17 @@
 # Mudir brand assets
 
-Optional marketing and receipt assets for Mudir v1.0. The app ships with Tauri default icons until custom artwork is added here.
-
-## Recommended files
-
 | File | Use |
 |---|---|
-| `logo.svg` | Sidebar, onboarding, receipts |
-| `logo-mark.svg` | Favicon, app icon source |
-| `receipt-header.png` | 80mm thermal receipt header (optional) |
-
-## Guidelines
+| `logo.png` | App UI wordmark (sidebar, login, onboarding) |
+| `logo-icon.png` | Square source for `pnpm tauri icon` (auto-generated) |
 
 See [`docs/brand-book.md`](../../docs/brand-book.md) for colors, typography, and bilingual naming (**مدیر — Mudir**, **فروشگاه** not مغازه).
 
-After adding `logo-mark.svg`, regenerate Tauri icons:
+After updating `logo.png`, regenerate app and installer assets:
 
 ```shell
-pnpm tauri icon public/brand/logo-mark.svg
+pnpm brand:icons
+pnpm tauri build
 ```
+
+The web UI uses `public/brand/logo.png`. The Windows installer uses separate files in `src-tauri/icons/` (`icon.ico`, `installer-sidebar.bmp`, `installer-header.bmp`).

@@ -62,6 +62,7 @@
     "fix": "ultracite fix",
     "dev": "tauri dev",
     "build": "tauri build",
+    "brand:icons": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/generate-installer-assets.ps1 && tauri icon public/brand/logo-icon.png && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/generate-installer-assets.ps1 -CleanupMobileOnly && node -e \"require('fs').copyFileSync('src-tauri/icons/icon.ico','public/favicon.ico')\"",
     "postinstall": "node scripts/sync-pdf-worker.mjs",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",

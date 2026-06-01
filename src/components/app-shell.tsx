@@ -1,6 +1,6 @@
 "use client";
 
-import { Languages, LogOut, Search, Store } from "lucide-react";
+import { Languages, LogOut, Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -9,6 +9,7 @@ import { getBusinessSettings } from "@/bridge/settings";
 import type { StoredOperator } from "@/bridge/users";
 import { getStoredOperator, setStoredOperator } from "@/bridge/users";
 import { NavIcon } from "@/components/app-icons";
+import { AppLogo } from "@/components/app-logo";
 import { navItemsForRole } from "@/components/app-nav";
 import { CommandPalette } from "@/components/command-palette";
 import { LicenseExpiryBanner } from "@/components/license-expiry-banner";
@@ -88,7 +89,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <SidebarHeader className="border-sidebar-border border-b px-4 py-3">
           <div className="flex flex-col gap-0.5">
             <span className="flex items-center gap-2 font-semibold text-sm">
-              <Store aria-hidden className="size-4 shrink-0 text-primary" />
+              <AppLogo size={20} />
               {t("app.name")}
             </span>
             {storeName ? (

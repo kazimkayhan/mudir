@@ -3,11 +3,13 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use tauri::Manager;
 use zip::write::SimpleFileOptions;
 use zip::{ZipArchive, ZipWriter};
 
-use crate::{read_schema_version, resolve_mudir_db_path, sqlite_backup_to, EXPECTED_SCHEMA_VERSION};
+use crate::{
+  read_schema_version, resolve_app_data_root, resolve_mudir_db_path, sqlite_backup_to,
+  EXPECTED_SCHEMA_VERSION,
+};
 
 const BACKUP_EXT: &str = "mudir-backup";
 const KEEP_DAYS: i64 = 30;
@@ -50,24 +52,15 @@ pub struct BackupStatus {
 }
 
 fn app_data_path(app: &tauri::AppHandle, file_name: &str) -> Result<PathBuf, String> {
-  app
-    .path()
-    .resolve(file_name, tauri::path::BaseDirectory::AppData)
-    .map_err(|e| format!("resolve {file_name}: {e}"))
+  Ok(resolve_app_data_root(app)?.join(file_name))
 }
 
 fn company_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-  app
-    .path()
-    .resolve("company", tauri::path::BaseDirectory::AppData)
-    .map_err(|e| format!("resolve company dir: {e}"))
+  Ok(resolve_app_data_root(app)?.join("company"))
 }
 
 fn backup_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-  app
-    .path()
-    .resolve("Mudir Backups", tauri::path::BaseDirectory::Document)
-    .map_err(|e| format!("resolve backup dir: {e}"))
+  Ok(resolve_app_data_root(app)?.join("backups"))
 }
 
 fn today_backup_name() -> String {

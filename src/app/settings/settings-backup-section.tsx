@@ -20,6 +20,7 @@ import {
   exportSuppliersCsv,
 } from "@/bridge/data-export";
 import type { BusinessSettings } from "@/bridge/settings";
+import { getStoragePaths, type StoragePaths } from "@/bridge/storage";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -53,6 +54,7 @@ export function SettingsBackupSection({
   const { t } = useI18n();
   const backupSectionId = useId();
   const [backupStatus, setBackupStatus] = useState<BackupStatus | null>(null);
+  const [storagePaths, setStoragePaths] = useState<StoragePaths | null>(null);
   const [productImportOpen, setProductImportOpen] = useState(false);
   const [customerImportOpen, setCustomerImportOpen] = useState(false);
 
@@ -61,10 +63,15 @@ export function SettingsBackupSection({
       return;
     }
     try {
-      const status = await getBackupStatus();
+      const [status, paths] = await Promise.all([
+        getBackupStatus(),
+        getStoragePaths(),
+      ]);
       setBackupStatus(status);
+      setStoragePaths(paths);
     } catch {
       setBackupStatus(null);
+      setStoragePaths(null);
     }
   }, []);
 
@@ -149,6 +156,56 @@ export function SettingsBackupSection({
           <CardDescription>{t("data.description")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {storagePaths ? (
+            <div className="space-y-2 rounded-lg border bg-muted/30 p-4">
+              <p className="font-medium text-sm">{t("data.storage.title")}</p>
+              <dl className="space-y-1 text-muted-foreground text-sm">
+                <div>
+                  <dt className="inline font-medium text-foreground">
+                    {t("data.storage.dataRoot")}:{" "}
+                  </dt>
+                  <dd className="inline break-all font-mono text-xs">
+                    {storagePaths.dataRoot}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="inline font-medium text-foreground">
+                    {t("data.storage.databasePath")}:{" "}
+                  </dt>
+                  <dd className="inline break-all font-mono text-xs">
+                    {storagePaths.databasePath}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="inline font-medium text-foreground">
+                    {t("data.storage.databaseUri")}:{" "}
+                  </dt>
+                  <dd className="inline break-all font-mono text-xs">
+                    {storagePaths.databaseUri}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="inline font-medium text-foreground">
+                    {t("data.storage.backupsDir")}:{" "}
+                  </dt>
+                  <dd className="inline break-all font-mono text-xs">
+                    {storagePaths.backupsDir}
+                  </dd>
+                </div>
+                {storagePaths.legacyDatabasePath ? (
+                  <div>
+                    <dt className="inline font-medium text-foreground">
+                      {t("data.storage.legacyPath")}:{" "}
+                    </dt>
+                    <dd className="inline break-all font-mono text-xs">
+                      {storagePaths.legacyDatabasePath}
+                    </dd>
+                  </div>
+                ) : null}
+              </dl>
+            </div>
+          ) : null}
+
           <div className="space-y-2">
             <p className="font-medium text-sm">{t("data.backup.autoTitle")}</p>
             <p className="text-muted-foreground text-sm">
